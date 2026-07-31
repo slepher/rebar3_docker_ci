@@ -2,7 +2,8 @@
 
 -behaviour(provider).
 
--export([init/1, do/1, format_error/1, opts/0, validate_selection/2]).
+-export([init/1, do/1, format_error/1, opts/0, validate_selection/2,
+         matrix_results/2]).
 
 init(State) ->
     Provider = providers:create(
@@ -97,22 +98,59 @@ run_with_project(State, Options, Suite, TestCase, Config,
                            rebar3_docker_ci_docker:execute(
                              rebar3_docker_ci_docker:run_args(Context, Version))
                    end),
-        finish_run(State, Options, Volume, Config, Result)
+        print_matrix_summary(ProjectName, Versions, Result),
+        finish_run(State, Options, ProjectName, Versions,
+                   Volume, Config, Result)
     else
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
-finish_run(State, Options, Volume, Config, Result) ->
+finish_run(State, Options, ProjectName, Versions, Volume, Config, Result) ->
     case maps:get(no_view, Options, false) of
         true -> provider_result(State, Result);
         false ->
             Port = rebar3_docker_ci_config:get(log_port, Config),
+            rebar3_docker_ci_prv_logs:print_links(
+              ProjectName, Versions, Volume, Port),
             case rebar3_docker_ci_docker:execute(
                    rebar3_docker_ci_docker:viewer_args(Volume, Port)) of
                 ok -> provider_result(State, Result);
                 {error, Reason} -> {error, {?MODULE, Reason}}
             end
     end.
+
+matrix_results(Versions, ok) ->
+    [{Version, passed} || Version <- Versions];
+matrix_results(Versions, {error, {ci_failed, Failures}}) ->
+    [matrix_version_result(Version, Failures) || Version <- Versions];
+matrix_results(Versions, {error, Reason}) ->
+    [{Version, {failed, Reason}} || Version <- Versions].
+
+matrix_version_result(Version, Failures) ->
+    case lists:keyfind(Version, 1, Failures) of
+        false -> {Version, passed};
+        {Version, Reason} -> {Version, {failed, Reason}}
+    end.
+
+print_matrix_summary(ProjectName, Versions, Result) ->
+    rebar_api:info("~n=== ~s local CI summary ===", [ProjectName]),
+    rebar_api:info("--------------------------------------------------------", []),
+    lists:foreach(fun print_matrix_result/1, matrix_results(Versions, Result)),
+    rebar_api:info("--------------------------------------------------------", []),
+    rebar_api:info("Overall result: ~s", [overall_status(Result)]).
+
+print_matrix_result({Version, Status}) ->
+    rebar_api:info(">>> Erlang/OTP ~s: ~s", [Version, status_text(Status)]).
+
+status_text(passed) ->
+    "PASSED";
+status_text({failed, {command_failed, Status}}) ->
+    lists:flatten(io_lib:format("FAILED (exit code ~p)", [Status]));
+status_text({failed, Reason}) ->
+    lists:flatten(io_lib:format("FAILED (~p)", [Reason])).
+
+overall_status(ok) -> "PASSED";
+overall_status({error, _Reason}) -> "FAILED".
 
 provider_result(State, ok) -> {ok, State};
 provider_result(_State, {error, Reason}) -> {error, {?MODULE, Reason}}.

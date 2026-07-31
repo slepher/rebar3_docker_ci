@@ -16,8 +16,8 @@ rebar3 docker_ci logs
 
 The plugin and the project under test have independent OTP requirements:
 
-- The `0.1.2` release runs the plugin on Erlang/OTP 27 or newer.
-- The `otp-19-0.1.2` release preserves a host plugin compatible with OTP 19.
+- The `0.1.3` release runs the plugin on Erlang/OTP 27 or newer.
+- The `otp-19-0.1.3` release preserves a host plugin compatible with OTP 19.
 - Docker targets are selected by project configuration and may use OTP 19,
   OTP 21, or any other available official Erlang image.
 
@@ -33,7 +33,7 @@ plugin's host requirement.
 - Docker Desktop or Docker Engine available in `PATH`
 - Git when the project is a Git worktree
 
-Use the `otp-19` branch and `otp-19-0.1.2` tag when the developer machine itself
+Use the `otp-19` branch and `otp-19-0.1.3` tag when the developer machine itself
 must run OTP 19.
 
 ## Installation
@@ -45,7 +45,7 @@ Add the plugin to the developer machine's global Rebar3 configuration at
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.1.2"}}}
+      {tag, "0.1.3"}}}
 ]}.
 ```
 

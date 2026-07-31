@@ -197,5 +197,4 @@ if [[ -d "_build/test/cover" ]]; then
 fi
 
 printf 'result=%s\n' "$CI_EXIT_CODE" >> "$SUMMARY_FILE"
-cat "$SUMMARY_FILE"
 exit "$CI_EXIT_CODE"

@@ -34,7 +34,9 @@ suite_and_case(Config) ->
     Environment = base_environment(Config) ++
         [{"TEST_SUITE", "astranaut_design_SUITE"},
          {"TEST_CASE", "lib_form_source_contracts"}],
-    0 = run_script(Config, Environment),
+    {0, Output} = run_script(Config, Environment),
+    false = contains(Output, "compile=0"),
+    false = contains(Output, "result=0"),
     Calls = read_file(?config(calls, Config)),
     true = contains(Calls, "compile\n"),
     true = contains(Calls, "xref\n"),
@@ -50,7 +52,9 @@ suite_and_case(Config) ->
 
 failed_check_stops_later_checks(Config) ->
     Environment = base_environment(Config) ++ [{"FAIL_COMMAND", "xref"}],
-    9 = run_script(Config, Environment),
+    {9, Output} = run_script(Config, Environment),
+    false = contains(Output, "xref=9"),
+    false = contains(Output, "result=9"),
     Calls = read_file(?config(calls, Config)),
     true = contains(Calls, "compile\n"),
     true = contains(Calls, "xref\n"),
@@ -78,7 +82,7 @@ base_environment(Config) ->
 run_script(_Config, Environment) ->
     Script = filename:join(code:priv_dir(rebar3_docker_ci), "inner_test.sh"),
     EnvArgs = lists:append([[Key ++ "=" ++ Value] || {Key, Value} <- Environment]),
-    run(os:find_executable("env"), EnvArgs ++ ["bash", Script]).
+    run_capture(os:find_executable("env"), EnvArgs ++ ["bash", Script]).
 
 run_ok(Executable, Args) ->
     case run(Executable, Args) of
@@ -89,15 +93,22 @@ run_ok(Executable, Args) ->
 run(false, _Args) ->
     127;
 run(Executable, Args) ->
+    {Status, _Output} = run_capture(Executable, Args),
+    Status.
+
+run_capture(false, _Args) ->
+    {127, ""};
+run_capture(Executable, Args) ->
     Port = open_port({spawn_executable, Executable},
                      [binary, exit_status, use_stdio, stderr_to_stdout,
                       {args, Args}]),
-    collect(Port).
+    collect(Port, []).
 
-collect(Port) ->
+collect(Port, Acc) ->
     receive
-        {Port, {data, _Data}} -> collect(Port);
-        {Port, {exit_status, Status}} -> Status
+        {Port, {data, Data}} -> collect(Port, [Data | Acc]);
+        {Port, {exit_status, Status}} ->
+            {Status, binary_to_list(iolist_to_binary(lists:reverse(Acc)))}
     end.
 
 fake_rebar_script() ->

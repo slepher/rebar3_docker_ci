@@ -2,7 +2,8 @@
 
 -behaviour(provider).
 
--export([init/1, do/1, format_error/1, opts/0, validate_port/1]).
+-export([init/1, do/1, format_error/1, opts/0, validate_port/1,
+         print_links/4]).
 
 init(State) ->
     Provider = providers:create(
@@ -33,7 +34,8 @@ do(State) ->
                         rebar3_docker_ci_config:get(log_port, Config)),
         {ok, ValidPort} ?= validate_port(Port),
         ok ?= ensure_volume_exists(Volume),
-        print_links(ProjectName, Config, Volume, ValidPort),
+        Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+        print_links(ProjectName, Versions, Volume, ValidPort),
         ok ?= rebar3_docker_ci_docker:execute(
                  rebar3_docker_ci_docker:viewer_args(Volume, ValidPort)),
         {ok, State}
@@ -57,8 +59,7 @@ ensure_volume_exists(Volume) ->
             {error, {log_volume_missing, Volume}}
     end.
 
-print_links(ProjectName, Config, Volume, Port) ->
-    Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+print_links(ProjectName, Versions, Volume, Port) ->
     rebar_api:info("~n=== ~s local CI logs ===", [ProjectName]),
     rebar_api:info("--------------------------------------------------------", []),
     lists:foreach(fun(Version) -> print_version_links(Version, Port, Volume) end,
