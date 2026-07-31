@@ -34,7 +34,9 @@ do(State) ->
                         rebar3_docker_ci_config:get(log_port, Config)),
         {ok, ValidPort} ?= validate_port(Port),
         ok ?= ensure_volume_exists(Volume),
-        Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+        Images = rebar3_docker_ci_config:get(target_images, Config),
+        {ok, Targets} ?= rebar3_docker_ci_targets:resolve(Images),
+        Versions = [maps:get(otp, Target) || Target <- Targets],
         print_links(ProjectName, Versions, Volume, ValidPort),
         ok ?= rebar3_docker_ci_docker:execute(
                  rebar3_docker_ci_docker:viewer_args(Volume, ValidPort)),

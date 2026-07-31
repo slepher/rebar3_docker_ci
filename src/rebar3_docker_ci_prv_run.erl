@@ -71,18 +71,18 @@ load_and_run(State, Options, Selection) ->
 
 run_with_project(State, Options, Suite, TestCase, Config,
                  Root, ProjectName, Checkouts) ->
-    Versions = selected_versions(Options, Config),
-    Image = rebar3_docker_ci_config:get(image_name, Config),
+    Images = rebar3_docker_ci_config:get(target_images, Config),
     Volume = rebar3_docker_ci_project:volume_name(
                rebar3_docker_ci_config:get(log_volume, Config), ProjectName),
     maybe
-        ok ?= ensure_images(Versions, Image),
+        {ok, ResolvedTargets} ?= rebar3_docker_ci_targets:resolve(Images),
+        {ok, Targets} ?= rebar3_docker_ci_targets:select(
+                           ResolvedTargets, maps:get(otp, Options, undefined)),
         ok ?= ensure_volume(Volume),
         {ok, PrivDir} ?= rebar3_docker_ci_project:priv_dir(),
         Context = #{project_root => Root,
                     scripts_dir => PrivDir,
                     project_name => ProjectName,
-                    image_name => Image,
                     log_volume => Volume,
                     test_suite => Suite,
                     test_case => TestCase,
@@ -92,24 +92,27 @@ run_with_project(State, Options, Suite, TestCase, Config,
                     output_lang => output_language(Config),
                     checkouts => Checkouts},
         Result = rebar3_docker_ci_docker:run_matrix(
-                   Versions,
-                   fun(Version) ->
-                           rebar_api:info("Running Docker CI on OTP ~s", [Version]),
+                   Targets,
+                   fun(Target) ->
+                           rebar_api:info("Running Docker CI on OTP ~s [~s]",
+                                          [maps:get(otp, Target),
+                                           maps:get(image, Target)]),
                            rebar3_docker_ci_docker:execute(
-                             rebar3_docker_ci_docker:run_args(Context, Version))
+                             rebar3_docker_ci_docker:run_args(Context, Target))
                    end),
-        print_matrix_summary(ProjectName, Versions, Result),
-        finish_run(State, Options, ProjectName, Versions,
+        print_matrix_summary(ProjectName, Targets, Result),
+        finish_run(State, Options, ProjectName, Targets,
                    Volume, Config, Result)
     else
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
-finish_run(State, Options, ProjectName, Versions, Volume, Config, Result) ->
+finish_run(State, Options, ProjectName, Targets, Volume, Config, Result) ->
     case maps:get(no_view, Options, false) of
         true -> provider_result(State, Result);
         false ->
             Port = rebar3_docker_ci_config:get(log_port, Config),
+            Versions = [maps:get(otp, Target) || Target <- Targets],
             rebar3_docker_ci_prv_logs:print_links(
               ProjectName, Versions, Volume, Port),
             case rebar3_docker_ci_docker:execute(
@@ -119,28 +122,30 @@ finish_run(State, Options, ProjectName, Versions, Volume, Config, Result) ->
             end
     end.
 
-matrix_results(Versions, ok) ->
-    [{Version, passed} || Version <- Versions];
-matrix_results(Versions, {error, {ci_failed, Failures}}) ->
-    [matrix_version_result(Version, Failures) || Version <- Versions];
-matrix_results(Versions, {error, Reason}) ->
-    [{Version, {failed, Reason}} || Version <- Versions].
+matrix_results(Targets, ok) ->
+    [{Target, passed} || Target <- Targets];
+matrix_results(Targets, {error, {ci_failed, Failures}}) ->
+    [matrix_target_result(Target, Failures) || Target <- Targets];
+matrix_results(Targets, {error, Reason}) ->
+    [{Target, {failed, Reason}} || Target <- Targets].
 
-matrix_version_result(Version, Failures) ->
-    case lists:keyfind(Version, 1, Failures) of
-        false -> {Version, passed};
-        {Version, Reason} -> {Version, {failed, Reason}}
+matrix_target_result(Target, Failures) ->
+    case lists:keyfind(Target, 1, Failures) of
+        false -> {Target, passed};
+        {Target, Reason} -> {Target, {failed, Reason}}
     end.
 
-print_matrix_summary(ProjectName, Versions, Result) ->
+print_matrix_summary(ProjectName, Targets, Result) ->
     rebar_api:info("~n=== ~s local CI summary ===", [ProjectName]),
     rebar_api:info("--------------------------------------------------------", []),
-    lists:foreach(fun print_matrix_result/1, matrix_results(Versions, Result)),
+    lists:foreach(fun print_matrix_result/1, matrix_results(Targets, Result)),
     rebar_api:info("--------------------------------------------------------", []),
     rebar_api:info("Overall result: ~s", [overall_status(Result)]).
 
-print_matrix_result({Version, Status}) ->
-    rebar_api:info(">>> Erlang/OTP ~s: ~s", [Version, status_text(Status)]).
+print_matrix_result({Target, Status}) ->
+    rebar_api:info(">>> Erlang/OTP ~s [~s]: ~s",
+                   [maps:get(otp, Target), maps:get(image, Target),
+                    status_text(Status)]).
 
 status_text(passed) ->
     "PASSED";
@@ -155,15 +160,6 @@ overall_status({error, _Reason}) -> "FAILED".
 provider_result(State, ok) -> {ok, State};
 provider_result(_State, {error, Reason}) -> {error, {?MODULE, Reason}}.
 
-ensure_images([], _Image) ->
-    ok;
-ensure_images([Version | Rest], Image) ->
-    case rebar3_docker_ci_docker:execute_quiet(
-           rebar3_docker_ci_docker:inspect_image_args(Image, Version)) of
-        ok -> ensure_images(Rest, Image);
-        {error, _Reason} -> {error, {image_missing, Image ++ ":" ++ Version}}
-    end.
-
 ensure_volume(Volume) ->
     case rebar3_docker_ci_docker:execute_quiet(
            rebar3_docker_ci_docker:inspect_volume_args(Volume)) of
@@ -171,12 +167,6 @@ ensure_volume(Volume) ->
         {error, _Reason} ->
             rebar3_docker_ci_docker:execute(
               rebar3_docker_ci_docker:create_volume_args(Volume))
-    end.
-
-selected_versions(Options, Config) ->
-    case maps:get(otp, Options, undefined) of
-        undefined -> rebar3_docker_ci_config:get(erlang_versions, Config);
-        Version -> [Version]
     end.
 
 effective_xref(Options, Config) ->

@@ -32,19 +32,16 @@ config_example_test() ->
     ?assertEqual(nomatch, string:find(Example, "image_name")).
 
 matrix_results_test() ->
-    Versions = ["19", "21", "23", "28", "29"],
-    ?assertEqual([{"19", passed}, {"21", passed}, {"23", passed},
-                  {"28", passed}, {"29", passed}],
-                 rebar3_docker_ci_prv_run:matrix_results(Versions, ok)),
+    Targets = [#{image => "erlang:27", otp => "27"},
+               #{image => "example/ci:latest", otp => "29"}],
+    ?assertEqual([{lists:nth(1, Targets), passed},
+                  {lists:nth(2, Targets), passed}],
+                 rebar3_docker_ci_prv_run:matrix_results(Targets, ok)),
     Failure = {error, {ci_failed,
-                       [{"21", {command_failed, 9}},
-                        {"29", docker_start_failed}]}},
-    ?assertEqual([{"19", passed},
-                  {"21", {failed, {command_failed, 9}}},
-                  {"23", passed},
-                  {"28", passed},
-                  {"29", {failed, docker_start_failed}}],
-                 rebar3_docker_ci_prv_run:matrix_results(Versions, Failure)).
+                       [{lists:nth(2, Targets), {command_failed, 9}}]}},
+    ?assertEqual([{lists:nth(1, Targets), passed},
+                  {lists:nth(2, Targets), {failed, {command_failed, 9}}}],
+                 rebar3_docker_ci_prv_run:matrix_results(Targets, Failure)).
 
 common_test_selection_test_() ->
     [{"all", ?_assertEqual({ok, {"", ""}},

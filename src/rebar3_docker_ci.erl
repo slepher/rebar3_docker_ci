@@ -48,7 +48,15 @@ format_error(plugin_priv_not_found) ->
 format_error({checkouts_missing, Directory}) ->
     io_lib:format("checkouts are enabled but ~s is missing or empty", [Directory]);
 format_error({image_missing, Image}) ->
-    io_lib:format("Docker image ~s does not exist; run rebar3 docker_ci build first", [Image]);
+    io_lib:format("Docker image ~s does not exist; run rebar3 docker_ci pull first", [Image]);
+format_error({otp_detection_failed, Image, Reason}) ->
+    io_lib:format("could not detect the Erlang/OTP release in Docker image ~s: ~p",
+                  [Image, Reason]);
+format_error({duplicate_otp_release, Otp, Images}) ->
+    io_lib:format("Docker images ~p both provide Erlang/OTP ~s; "
+                  "report directories would overlap", [Images, Otp]);
+format_error({otp_not_configured, Otp}) ->
+    io_lib:format("no configured Docker image provides Erlang/OTP ~s", [Otp]);
 format_error({log_volume_missing, Volume}) ->
     io_lib:format("Docker log volume ~s does not exist; run rebar3 docker_ci run first", [Volume]);
 format_error({invalid_port, Port}) ->
