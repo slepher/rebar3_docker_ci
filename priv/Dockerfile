@@ -1,7 +1,0 @@
-ARG ERLANG_VER=28
-FROM erlang:${ERLANG_VER}
-
-WORKDIR /app
-
-ENTRYPOINT []
-CMD ["bash"]

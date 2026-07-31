@@ -3,27 +3,27 @@
 [English](README.md)
 
 `rebar3_docker_ci` 是运行在开发机上的 Rebar3 插件。它使用相互隔离的
-Docker 容器，在多个 Erlang/OTP 版本中编译并测试项目，用以下 Rebar3 命令
+Docker 容器，在多个 Erlang/OTP 版本中编译并测试项目，用标准 Rebar3 命令
 替代复制或同步 `ci_scripts`：
 
 ```text
-rebar3 docker_ci build
+rebar3 docker_ci config
+rebar3 docker_ci pull
 rebar3 docker_ci run
 rebar3 docker_ci logs
 ```
 
 ## 兼容性模型
 
-插件运行版本和被测项目版本彼此独立：
+插件宿主版本和被测项目版本彼此独立：
 
-- `0.1.3` 版本要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
-- `otp-19-0.1.3` 保留可在 OTP 19 开发机上运行的插件版本。
-- 被测 OTP 版本由项目配置决定，可以是 OTP 19、OTP 21 或其他存在官方
-  Erlang Docker 镜像的版本。
+- `0.2.0` 要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
+- `otp-19-0.2.0` 保留可在 OTP 19 开发机上运行的插件版本。
+- 测试目标可以使用 Docker 镜像提供的更旧或更新 OTP 版本。
 
 插件必须安装在开发机的 Rebar3 全局配置中，不能加入被测项目的
-`project_plugins`。项目插件会在容器内再次加载，这会错误地要求旧版目标 OTP
-编译运行在宿主机上的插件。
+`project_plugins`。项目插件会在测试容器内再次加载，使目标 OTP 错误地依赖
+宿主插件所要求的 OTP 版本。
 
 ## 环境要求
 
@@ -32,8 +32,7 @@ rebar3 docker_ci logs
 - `PATH` 中可用的 Docker Desktop 或 Docker Engine
 - 项目使用 Git 工作树时需要 Git
 
-开发机本身必须使用 OTP 19 时，请使用 `otp-19` 分支和
-`otp-19-0.1.3` 标签。
+开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.2.0`。
 
 ## 安装
 
@@ -43,26 +42,25 @@ rebar3 docker_ci logs
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.1.3"}}}
+      {tag, "0.2.0"}}}
 ]}.
 ```
 
-确认 provider 已正确加载：
+确认 Rebar3 已加载全部 provider，并查看详细参数：
 
 ```text
 rebar3 help docker_ci
-rebar3 help docker_ci build
+rebar3 help docker_ci config
+rebar3 help docker_ci pull
 rebar3 help docker_ci run
 rebar3 help docker_ci logs
 ```
 
-第一条命令列出所有任务；后三条命令分别显示完整参数，包括 `--otp`、
-`--suite`、`--case` 及其使用约束。
-
-被测项目的 `rebar.config` 只需要保存 `docker_ci` 配置，不要将插件添加到
-`project_plugins`。
+被测项目的 `rebar.config` 只保存 `docker_ci` 配置。
 
 ## 项目配置
+
+必须配置且只能配置一种目标来源。使用 Docker Hub 官方 Erlang 镜像时：
 
 ```erlang
 {docker_ci, [
@@ -72,92 +70,90 @@ rebar3 help docker_ci logs
     {use_checkouts, auto},
     {output_lang, auto},
     {log_port, 8081},
-    {image_name, "rebar3-docker-ci"},
     {log_volume, auto}
 ]}.
 ```
 
+每个版本会转换为 `erlang:<version>`。需要任意可拉取镜像时改用：
+
+```erlang
+{docker_ci, [
+    {docker_images, [
+        "erlang:27",
+        "registry.example.com/team/erlang-ci:28"
+    ]}
+]}.
+```
+
+`erlang_versions` 与 `docker_images` 互斥。插件不提供默认测试版本；目标配置
+缺失、为空或同时存在都会报错。运行 `rebar3 docker_ci config` 可查看配置示例、
+默认值、当前配置的校验结果及规范化后的镜像名称。
+
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `erlang_versions` | `["19", "28"]` | 非空的 Docker OTP 镜像标签列表。 |
+| `erlang_versions` | 必选项之一 | 非空 OTP 标签列表，转换为 `erlang:<version>`。 |
+| `docker_images` | 必选项之一 | 非空完整 Docker 镜像引用列表。 |
 | `run_xref` | `true` | 编译后运行 `rebar3 xref`。 |
 | `run_dialyzer` | `false` | Common Test 前运行 `rebar3 dialyzer`。 |
 | `use_checkouts` | `auto` | 是否包含 `_checkouts`：`auto`、`true` 或 `false`。 |
 | `output_lang` | `auto` | runner 输出语言：`auto`、`en` 或 `cn`。 |
 | `log_port` | `8081` | 日志查看器使用的宿主端口。 |
-| `image_name` | `"rebar3-docker-ci"` | Docker 镜像仓库名。 |
 | `log_volume` | `auto` | Docker 日志卷；`auto` 按项目名称隔离。 |
 
-Common Test 的 suite 和 case 不写入配置，只通过命令行传入。`--suite` 可以
-单独使用，`--case` 必须和 `--suite` 一起使用。
+Common Test 的 suite 和 case 只通过命令行传入。`--suite` 可以单独使用，
+`--case` 必须和 `--suite` 一起使用。
 
-## 构建镜像
+## 拉取镜像
 
-构建配置中的完整矩阵：
-
-```text
-rebar3 docker_ci build
-```
-
-只构建一个目标版本：
+首次运行或修改目标后，拉取配置中的全部镜像：
 
 ```text
-rebar3 docker_ci build --otp 29
+rebar3 docker_ci pull
 ```
 
-镜像标签格式为 `<image_name>:<otp>`。镜像只包含 Erlang 和 Rebar3，不包含
-项目源码，因此修改源码后无需重新构建镜像。
+插件直接运行这些镜像，不再构建包装镜像。每个镜像必须包含 Erlang、Rebar3、
+Bash 以及项目需要的标准工具。插件通过在镜像内运行 `erl` 检测真实 OTP 版本；
+`--otp` 选择和日志路径使用检测结果，而不是镜像标签。两个镜像不能报告相同的
+OTP 版本。
 
 ## 运行检查
 
-运行完整矩阵且不启动日志查看器：
-
 ```text
+# 运行完整矩阵，不启动日志查看器
 rebar3 docker_ci run --no-view
-```
 
-只运行一个 OTP 版本：
-
-```text
+# 运行一个检测到的 OTP 版本
 rebar3 docker_ci run --otp 23 --no-view
-```
 
-运行单个 suite：
-
-```text
+# 运行单个 Common Test suite
 rebar3 docker_ci run --otp 28 --suite sample_SUITE --no-view
+
+# 运行 suite 中的单个 case
+rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case --no-view
 ```
 
-运行 suite 中的单个 case：
-
-```text
-rebar3 docker_ci run --otp 29 \
-    --suite sample_SUITE --case sample_case --no-view
-```
-
-可用的单次运行覆盖参数：
+单次运行覆盖参数：
 
 - `--dialyzer`：本次运行启用 Dialyzer。
 - `--skip-xref`：本次运行关闭 xref。
 - `--no-checkouts`：忽略项目的 `_checkouts`。
 - `--no-view`：测试结束后直接返回，不启动 Nginx。
 
-每个 OTP 版本依次执行 compile、可选 xref、可选 Dialyzer 和 Common Test。
-某一步失败后，该版本跳过后续步骤，但矩阵中的其他版本仍会继续。所有版本完成
-后，只要存在失败版本，宿主命令就返回失败。
+每个目标依次执行 compile、可选 xref、可选 Dialyzer 和 Common Test。某一步
+失败后，该目标跳过后续步骤，但矩阵中的其他目标继续运行。最终汇总列出每个
+选中 OTP 版本及来源镜像，然后显示总结果；启用查看器时还会输出 HTTP 链接。
 
 ## 源码隔离与 checkout
 
-宿主项目以只读方式挂载。容器通过以下命令获得要复制到临时工作树的文件：
+宿主项目以只读方式挂载。容器复制以下命令报告的文件：
 
 ```text
 git ls-files --cached --others --exclude-standard
 ```
 
-因此已跟踪修改和未忽略的新文件都会参与测试，但不会复用宿主 `_build`。
-启用 `use_checkouts` 后，每个 checkout 都会只读挂载并复制进隔离工作树。
-显式设置为 `true` 时，缺失或空的 `_checkouts` 会产生错误；`auto` 则自动关闭
-checkout 处理。
+已跟踪修改和未忽略的新文件都会参与测试，但不复用宿主 `_build`。启用的
+checkout 以只读方式挂载并复制到隔离工作树。显式设置 `true` 时，缺失或为空的
+`_checkouts` 会报错；`auto` 此时自动关闭 checkout 处理。
 
 ## 日志与覆盖率
 
@@ -176,28 +172,25 @@ Nginx 从 Docker 日志卷提供以下路径：
 /<otp>/cover/index.html
 ```
 
-按 Ctrl+C 停止查看器。即使后续步骤被跳过，`ci-summary.txt` 也会记录每一步
-的状态。
+按 Ctrl+C 会停止查看器及其容器。输出只包含配置的镜像，并使用检测到的 OTP
+版本。即使后续步骤被跳过，`ci-summary.txt` 也会记录每一步状态。
 
 ## 从同步脚本迁移
 
 1. 在开发机 Rebar3 全局配置中安装插件。
-2. 将 `ERLANG_VSNS`、`RUN_XREF`、`RUN_DIALYZER`、`USE_CHECKOUTS`、
-   `OUTPUT_LANG` 和 `LOG_PORT` 转换为 `docker_ci` 配置项。
-3. 将 suite 和 case 改为通过 `--suite`、`--case` 传入。
-4. 使用 `build`、`run`、`logs` provider 替代旧脚本调用。
-5. 新命令验证通过后删除复制的 `ci_scripts`。
+2. 在 `rebar.config` 中添加 `erlang_versions` 或 `docker_images`，只能二选一。
+3. 将其余 CI 环境值转换为可选的 `docker_ci` 配置项。
+4. 将 suite 和 case 改为通过 `--suite`、`--case` 传入。
+5. 使用 `pull`、`run`、`logs` provider 替代旧脚本调用。
+6. 新命令验证通过后删除复制的 `ci_scripts`。
 
-迁移完成后，项目不再依赖 Astranaut 或其他仓库提供 CI 实现文件。
+迁移完成后，项目运行 CI 时不再依赖 Astranaut 或其他仓库的实现文件。
 
 ## 开发验证
 
 ```text
-rebar3 compile
-rebar3 eunit
-rebar3 ct
+rebar3 do compile, eunit, ct
 ```
 
-插件还使用 Astranaut 在 OTP 19、21、23、28、29 上完成了真实集成测试，包括
-xref、每个完整矩阵目标的 386 个 Common Test、单 suite、单 case、日志导出和
-覆盖率导出。
+插件使用 Astranaut 在 OTP 19、21、23、28、29 上执行真实集成测试，包括 xref、
+Common Test、suite/case 选择、日志导出和覆盖率导出。

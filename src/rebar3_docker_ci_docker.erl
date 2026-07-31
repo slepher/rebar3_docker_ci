@@ -1,18 +1,9 @@
 -module(rebar3_docker_ci_docker).
 
--export([build_args/4, inspect_image_args/2, inspect_image_args/1,
-         pull_args/1, detect_otp_args/1, parse_otp_release/1,
+-export([inspect_image_args/1, pull_args/1, detect_otp_args/1, parse_otp_release/1,
          create_volume_args/1, run_args/2, viewer_args/2, volume_file_args/2,
          inspect_volume_args/1, execute/1, execute/2, execute_capture/1,
          execute_quiet/1, run_matrix/2]).
-
-build_args(Image, Version, Dockerfile, Context) ->
-    ["build", "--tag", Image ++ ":" ++ Version,
-     "--build-arg", "ERLANG_VER=" ++ Version,
-     "--file", Dockerfile, Context].
-
-inspect_image_args(Image, Version) ->
-    ["image", "inspect", Image ++ ":" ++ Version].
 
 pull_args(Image) ->
     ["pull", Image].
