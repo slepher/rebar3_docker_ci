@@ -17,7 +17,8 @@ init(State) ->
     lists:foldl(fun init_provider/2, {ok, State}, provider_modules()).
 
 provider_modules() ->
-    [rebar3_docker_ci_prv_build,
+    [rebar3_docker_ci_prv_config,
+     rebar3_docker_ci_prv_pull,
      rebar3_docker_ci_prv_run,
      rebar3_docker_ci_prv_logs].
 
@@ -34,6 +35,8 @@ format_error({conflicting_target_config, erlang_versions, docker_images}) ->
 format_error({removed_config, image_name}) ->
     "docker_ci option image_name was removed in 0.2.0; configure "
     "erlang_versions or docker_images instead";
+format_error({pull_failed, Failures}) ->
+    io_lib:format("failed to pull Docker CI images: ~p", [Failures]);
 format_error({unknown_config, Key}) ->
     io_lib:format("unknown docker_ci configuration option: ~p", [Key]);
 format_error(case_requires_suite) ->
