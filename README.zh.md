@@ -16,8 +16,8 @@ rebar3 docker_ci logs
 
 插件运行版本和被测项目版本彼此独立：
 
-- `0.1.1` 版本要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
-- `otp-19-0.1.1` 保留可在 OTP 19 开发机上运行的插件版本。
+- `0.1.2` 版本要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
+- `otp-19-0.1.2` 保留可在 OTP 19 开发机上运行的插件版本。
 - 被测 OTP 版本由项目配置决定，可以是 OTP 19、OTP 21 或其他存在官方
   Erlang Docker 镜像的版本。
 
@@ -33,7 +33,7 @@ rebar3 docker_ci logs
 - 项目使用 Git 工作树时需要 Git
 
 开发机本身必须使用 OTP 19 时，请使用 `otp-19` 分支和
-`otp-19-0.1.1` 标签。
+`otp-19-0.1.2` 标签。
 
 ## 安装
 
@@ -43,7 +43,7 @@ rebar3 docker_ci logs
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.1.1"}}}
+      {tag, "0.1.2"}}}
 ]}.
 ```
 

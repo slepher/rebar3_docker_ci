@@ -38,7 +38,7 @@ run_args(Context, Version) ->
         [Image, "bash", "/mnt/scripts/inner_test.sh"].
 
 viewer_args(Volume, Port) ->
-    ["run", "--rm",
+    ["run", "--rm", "--interactive",
      "--publish", integer_to_list(Port) ++ ":80",
      "--volume", Volume ++ ":/usr/share/nginx/html:ro",
      "nginx:alpine", "/bin/sh", "-c", viewer_command()].
@@ -122,4 +122,13 @@ viewer_command() ->
     "'http { access_log off; include /etc/nginx/mime.types; "
     "include /etc/nginx/conf.d/*.conf; }' "
     "> /tmp/nginx-quiet.conf; "
-    "exec nginx -c /tmp/nginx-quiet.conf -g 'daemon off;'".
+    "exec 3<&0; "
+    "nginx -c /tmp/nginx-quiet.conf -g 'daemon off;' & nginx_pid=$!; "
+    "(while IFS= read -r line <&3; do :; done; "
+    "kill -TERM $nginx_pid 2>/dev/null) & stdin_watcher=$!; "
+    "trap 'kill -TERM $nginx_pid 2>/dev/null; "
+    "kill $stdin_watcher 2>/dev/null' HUP INT TERM; "
+    "wait $nginx_pid; status=$?; "
+    "kill $stdin_watcher 2>/dev/null; "
+    "wait $stdin_watcher 2>/dev/null; "
+    "exit $status".
