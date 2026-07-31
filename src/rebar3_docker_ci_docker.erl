@@ -1,8 +1,10 @@
 -module(rebar3_docker_ci_docker).
 
--export([build_args/4, inspect_image_args/2, inspect_volume_args/1,
+-export([build_args/4, inspect_image_args/2, inspect_image_args/1,
+         pull_args/1, detect_otp_args/1, parse_otp_release/1,
          create_volume_args/1, run_args/2, viewer_args/2, volume_file_args/2,
-         execute/1, execute/2, execute_quiet/1, run_matrix/2]).
+         inspect_volume_args/1, execute/1, execute/2, execute_capture/1,
+         execute_quiet/1, run_matrix/2]).
 
 build_args(Image, Version, Dockerfile, Context) ->
     ["build", "--tag", Image ++ ":" ++ Version,
@@ -12,16 +14,39 @@ build_args(Image, Version, Dockerfile, Context) ->
 inspect_image_args(Image, Version) ->
     ["image", "inspect", Image ++ ":" ++ Version].
 
+pull_args(Image) ->
+    ["pull", Image].
+
+inspect_image_args(Image) ->
+    ["image", "inspect", Image].
+
+detect_otp_args(Image) ->
+    ["run", "--rm", "--entrypoint", "erl", Image,
+     "-noshell", "-eval",
+     "io:format(\"~s\", [erlang:system_info(otp_release)]), halt()."].
+
+parse_otp_release(Output) when is_binary(Output) ->
+    parse_otp_release(binary_to_list(Output));
+parse_otp_release(Output) when is_list(Output) ->
+    Release = string:trim(Output),
+    case Release =/= [] andalso lists:all(fun otp_release_char/1, Release) of
+        true -> {ok, Release};
+        false -> {error, invalid_otp_release}
+    end;
+parse_otp_release(_Output) ->
+    {error, invalid_otp_release}.
+
 inspect_volume_args(Volume) ->
     ["volume", "inspect", Volume].
 
 create_volume_args(Volume) ->
     ["volume", "create", Volume].
 
-run_args(Context, Version) ->
+run_args(Context, Target) ->
     ProjectRoot = maps:get(project_root, Context),
     ScriptsDir = maps:get(scripts_dir, Context),
-    Image = maps:get(image_name, Context) ++ ":" ++ Version,
+    Image = maps:get(image, Target),
+    Version = maps:get(otp, Target),
     Base = ["run", "--rm"] ++
         env("ERLANG_VER", Version) ++
         env("PROJECT_NAME", maps:get(project_name, Context)) ++
@@ -35,7 +60,7 @@ run_args(Context, Version) ->
          "--volume", ScriptsDir ++ ":/mnt/scripts:ro",
          "--volume", maps:get(log_volume, Context) ++ ":/mnt/logs"],
     Base ++ checkout_args(maps:get(checkouts, Context)) ++
-        [Image, "bash", "/mnt/scripts/inner_test.sh"].
+        ["--entrypoint", "bash", Image, "/mnt/scripts/inner_test.sh"].
 
 viewer_args(Volume, Port) ->
     ["run", "--rm", "--interactive",
@@ -60,6 +85,19 @@ execute(Executable, Args) ->
         Port -> collect(Port, true)
     catch
         error:Reason -> {error, {docker_start_failed, Reason}}
+    end.
+
+execute_capture(Args) ->
+    case os:find_executable("docker") of
+        false -> {error, docker_not_found};
+        Executable ->
+            try open_port({spawn_executable, Executable},
+                          [binary, exit_status, use_stdio, stderr_to_stdout,
+                           {args, Args}]) of
+                Port -> collect_capture(Port, [])
+            catch
+                error:Reason -> {error, {docker_start_failed, Reason}}
+            end
     end.
 
 execute_quiet(Args) ->
@@ -102,6 +140,16 @@ collect(Port, Print) ->
 maybe_print(true, Data) -> io:put_chars(Data);
 maybe_print(false, _Data) -> ok.
 
+collect_capture(Port, Acc) ->
+    receive
+        {Port, {data, Data}} ->
+            collect_capture(Port, [Data | Acc]);
+        {Port, {exit_status, 0}} ->
+            {ok, iolist_to_binary(lists:reverse(Acc))};
+        {Port, {exit_status, Status}} ->
+            {error, {command_failed, Status}}
+    end.
+
 env(Name, Value) ->
     ["--env", Name ++ "=" ++ Value].
 
@@ -113,6 +161,12 @@ checkout_args(Checkouts) ->
 
 bool_string(true) -> "true";
 bool_string(false) -> "false".
+
+otp_release_char(Char) when Char >= $0, Char =< $9 -> true;
+otp_release_char($.) -> true;
+otp_release_char($-) -> true;
+otp_release_char($_) -> true;
+otp_release_char(_Char) -> false.
 
 viewer_command() ->
     "printf '%s\\n' "

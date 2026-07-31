@@ -2,17 +2,31 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-build_args_test() ->
-    ?assertEqual(["build", "--tag", "ci-image:19", "--build-arg",
-                  "ERLANG_VER=19", "--file", "/plugin/priv/Dockerfile", "/project"],
-                 rebar3_docker_ci_docker:build_args(
-                   "ci-image", "19", "/plugin/priv/Dockerfile", "/project")).
+image_args_test() ->
+    ?assertEqual(["pull", "erlang:27"],
+                 rebar3_docker_ci_docker:pull_args("erlang:27")),
+    ?assertEqual(["image", "inspect", "example/erlang-ci:29"],
+                 rebar3_docker_ci_docker:inspect_image_args(
+                   "example/erlang-ci:29")),
+    ?assertEqual(["run", "--rm", "--entrypoint", "erl", "erlang:27",
+                  "-noshell", "-eval",
+                  "io:format(\"~s\", [erlang:system_info(otp_release)]), halt()."],
+                 rebar3_docker_ci_docker:detect_otp_args("erlang:27")).
+
+parse_otp_release_test() ->
+    ?assertEqual({ok, "27"},
+                 rebar3_docker_ci_docker:parse_otp_release(<<"27\n">>)),
+    ?assertEqual({ok, "29.1"},
+                 rebar3_docker_ci_docker:parse_otp_release(" 29.1 \r\n")),
+    ?assertEqual({error, invalid_otp_release},
+                 rebar3_docker_ci_docker:parse_otp_release(<<>>)),
+    ?assertEqual({error, invalid_otp_release},
+                 rebar3_docker_ci_docker:parse_otp_release("27 latest")).
 
 run_args_test() ->
     Context = #{project_root => "/project",
                 scripts_dir => "/plugin/priv",
                 project_name => "sample",
-                image_name => "ci-image",
                 log_volume => "ci-logs",
                 test_suite => "sample_SUITE",
                 test_case => "works",
@@ -21,14 +35,16 @@ run_args_test() ->
                 use_checkouts => true,
                 output_lang => en,
                 checkouts => [{"dep", "/checkout/dep"}]},
-    Args = rebar3_docker_ci_docker:run_args(Context, "28"),
+    Target = #{image => "example/erlang-ci:stable", otp => "28"},
+    Args = rebar3_docker_ci_docker:run_args(Context, Target),
     ?assertEqual(["run", "--rm"], lists:sublist(Args, 2)),
     ?assert(member_pair("--env", "TEST_SUITE=sample_SUITE", Args)),
     ?assert(member_pair("--env", "TEST_CASE=works", Args)),
     ?assert(member_pair("--volume", "/project:/mnt/source:ro", Args)),
     ?assert(member_pair("--volume", "/checkout/dep:/mnt/checkouts/dep:ro", Args)),
-    ?assertEqual(["ci-image:28", "bash", "/mnt/scripts/inner_test.sh"],
-                 lists:nthtail(length(Args) - 3, Args)).
+    ?assert(member_pair("--entrypoint", "bash", Args)),
+    ?assertEqual(["example/erlang-ci:stable", "/mnt/scripts/inner_test.sh"],
+                 lists:nthtail(length(Args) - 2, Args)).
 
 viewer_args_test() ->
     Args = rebar3_docker_ci_docker:viewer_args("ci-logs", 8082),
