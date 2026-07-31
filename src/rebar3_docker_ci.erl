@@ -23,6 +23,17 @@ provider_modules() ->
 
 format_error({invalid_config, Key, Value}) ->
     io_lib:format("invalid docker_ci configuration ~p=~p", [Key, Value]);
+format_error({missing_target_config, _Keys}) ->
+    "missing required Docker CI targets; configure exactly one of:\n\n"
+    "{docker_ci, [{erlang_versions, [\"27\", \"28\"]}]}.\n\n"
+    "or:\n\n"
+    "{docker_ci, [{docker_images, [\"erlang:27\", \"erlang:28\"]}]}.\n\n"
+    "Run `rebar3 help docker_ci config` for details.";
+format_error({conflicting_target_config, erlang_versions, docker_images}) ->
+    "docker_ci options erlang_versions and docker_images are mutually exclusive";
+format_error({removed_config, image_name}) ->
+    "docker_ci option image_name was removed in 0.2.0; configure "
+    "erlang_versions or docker_images instead";
 format_error({unknown_config, Key}) ->
     io_lib:format("unknown docker_ci configuration option: ~p", [Key]);
 format_error(case_requires_suite) ->
