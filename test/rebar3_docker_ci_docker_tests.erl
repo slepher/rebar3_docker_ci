@@ -35,7 +35,14 @@ viewer_args_test() ->
     ?assert(member_pair("--publish", "8082:80", Args)),
     ?assert(member_pair("--volume",
                         "ci-logs:/usr/share/nginx/html:ro", Args)),
-    ?assert(lists:member("nginx:alpine", Args)).
+    ?assert(lists:member("nginx:alpine", Args)),
+    Command = lists:last(Args),
+    ?assertNotEqual(nomatch,
+                    string:find(Command, "error_log /dev/stderr error;")),
+    ?assertNotEqual(nomatch, string:find(Command, "access_log off;")),
+    ?assertNotEqual(nomatch,
+                    string:find(Command,
+                                "exec nginx -c /tmp/nginx-quiet.conf")).
 
 volume_file_args_test() ->
     ?assertEqual(["run", "--rm", "--volume", "ci-logs:/data:ro",

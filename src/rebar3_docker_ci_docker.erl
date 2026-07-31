@@ -41,7 +41,7 @@ viewer_args(Volume, Port) ->
     ["run", "--rm",
      "--publish", integer_to_list(Port) ++ ":80",
      "--volume", Volume ++ ":/usr/share/nginx/html:ro",
-     "nginx:alpine", "/bin/sh", "-c", "nginx -g 'daemon off;'"].
+     "nginx:alpine", "/bin/sh", "-c", viewer_command()].
 
 volume_file_args(Volume, RelativePath) ->
     ["run", "--rm", "--volume", Volume ++ ":/data:ro",
@@ -113,3 +113,13 @@ checkout_args(Checkouts) ->
 
 bool_string(true) -> "true";
 bool_string(false) -> "false".
+
+viewer_command() ->
+    "printf '%s\\n' "
+    "'error_log /dev/stderr error;' "
+    "'pid /tmp/nginx.pid;' "
+    "'events {}' "
+    "'http { access_log off; include /etc/nginx/mime.types; "
+    "include /etc/nginx/conf.d/*.conf; }' "
+    "> /tmp/nginx-quiet.conf; "
+    "exec nginx -c /tmp/nginx-quiet.conf -g 'daemon off;'".

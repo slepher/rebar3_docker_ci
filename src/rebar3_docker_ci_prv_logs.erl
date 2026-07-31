@@ -31,7 +31,7 @@ do(State) ->
                         rebar3_docker_ci_config:get(log_port, Config)),
         {ok, ValidPort} ?= validate_port(Port),
         ok ?= ensure_volume_exists(Volume),
-        print_links(Config, Volume, ValidPort),
+        print_links(ProjectName, Config, Volume, ValidPort),
         ok ?= rebar3_docker_ci_docker:execute(
                  rebar3_docker_ci_docker:viewer_args(Volume, ValidPort)),
         {ok, State}
@@ -55,21 +55,27 @@ ensure_volume_exists(Volume) ->
             {error, {log_volume_missing, Volume}}
     end.
 
-print_links(Config, Volume, Port) ->
+print_links(ProjectName, Config, Volume, Port) ->
     Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+    rebar_api:info("~n=== ~s local CI logs ===", [ProjectName]),
+    rebar_api:info("--------------------------------------------------------", []),
     lists:foreach(fun(Version) -> print_version_links(Version, Port, Volume) end,
-                  Versions).
+                  Versions),
+    rebar_api:info("--------------------------------------------------------", []),
+    rebar_api:info("Press Ctrl+C to stop the viewer.", []).
 
 print_version_links(Version, Port, Volume) ->
     Base = "http://localhost:" ++ integer_to_list(Port) ++ "/" ++ Version,
+    rebar_api:info(">>> Erlang/OTP ~s", [Version]),
     print_if_present(Volume, Version ++ "/ci-summary.txt",
-                     "OTP ~s summary: ~s/ci-summary.txt", [Version, Base]),
+                     "  Summary: ~s/ci-summary.txt", [Base]),
     case present(Volume, Version ++ "/logs/index.html") of
-        true -> rebar_api:info("OTP ~s logs: ~s/logs/index.html", [Version, Base]);
-        false -> rebar_api:info("OTP ~s: no Common Test logs found", [Version])
+        true -> rebar_api:info("  Logs:    ~s/logs/index.html", [Base]);
+        false -> rebar_api:info("  No Common Test logs found.", [])
     end,
     print_if_present(Volume, Version ++ "/cover/index.html",
-                     "OTP ~s coverage: ~s/cover/index.html", [Version, Base]).
+                     "  Cover:   ~s/cover/index.html", [Base]),
+    rebar_api:info("", []).
 
 print_if_present(Volume, Path, Format, Args) ->
     case present(Volume, Path) of
