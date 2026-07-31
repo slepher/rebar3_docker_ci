@@ -1,13 +1,40 @@
 # rebar3_docker_ci
 
-`rebar3_docker_ci` runs Rebar3 checks against an Erlang/OTP version matrix in
-isolated Docker worktrees. Host-side operation is implemented as Rebar3
-providers, so consumer projects do not copy or synchronize CI scripts.
+[中文说明](README.zh.md)
 
-The plugin runs on Erlang/OTP 27 and newer. This host requirement is
-independent of the Erlang/OTP versions used to compile and test the target
-project in Docker; target projects may still run on OTP 19 or other legacy
-releases.
+`rebar3_docker_ci` is a host-side Rebar3 plugin that runs a project against an
+Erlang/OTP matrix in isolated Docker containers. It replaces copied or
+synchronized CI scripts with three Rebar3 commands:
+
+```text
+rebar3 docker_ci build
+rebar3 docker_ci run
+rebar3 docker_ci logs
+```
+
+## Compatibility model
+
+The plugin and the project under test have independent OTP requirements:
+
+- The `0.1` release runs the plugin on Erlang/OTP 27 or newer.
+- The `otp-19-0.1` release preserves a host plugin compatible with OTP 19.
+- Docker targets are selected by project configuration and may use OTP 19,
+  OTP 21, or any other available official Erlang image.
+
+The plugin must be installed globally on the developer machine. It must not be
+listed in the target project's `project_plugins`, because project plugins are
+loaded again inside the container and would couple the target OTP to the
+plugin's host requirement.
+
+## Requirements
+
+- Erlang/OTP 27 or newer on the developer machine
+- A compatible Rebar3 installation
+- Docker Desktop or Docker Engine available in `PATH`
+- Git when the project is a Git worktree
+
+Use the `otp-19` branch and `otp-19-0.1` tag when the developer machine itself
+must run OTP 19.
 
 ## Installation
 
@@ -16,21 +43,26 @@ Add the plugin to the developer machine's global Rebar3 configuration at
 
 ```erlang
 {plugins, [
-    {rebar3_docker_ci, "0.1.0"}
+    {rebar3_docker_ci,
+     {git, "https://github.com/slepher/rebar3_docker_ci.git",
+      {tag, "0.1"}}}
 ]}.
 ```
 
-Do not add the plugin to the target project's `project_plugins`. Project
-plugins are loaded again when Rebar3 runs inside the target container, which
-would make a legacy target OTP compile the OTP 27 host plugin.
+Confirm that Rebar3 can see the providers:
 
-Docker Desktop or Docker Engine must be available in `PATH`.
+```text
+rebar3 help docker_ci
+```
 
-## Configuration
+The target project's `rebar.config` contains only the `docker_ci` settings. Do
+not add `rebar3_docker_ci` to its `project_plugins`.
+
+## Project configuration
 
 ```erlang
 {docker_ci, [
-    {erlang_versions, ["19", "28"]},
+    {erlang_versions, ["19", "21", "23", "28", "29"]},
     {run_xref, true},
     {run_dialyzer, false},
     {use_checkouts, auto},
@@ -41,77 +73,101 @@ Docker Desktop or Docker Engine must be available in `PATH`.
 ]}.
 ```
 
-`use_checkouts` accepts `auto`, `true`, or `false`. Auto mode includes a
-non-empty `_checkouts` directory. Explicit `true` reports an error when no
-checkout exists.
+| Option | Default | Description |
+| --- | --- | --- |
+| `erlang_versions` | `["19", "28"]` | Non-empty Docker image tag matrix. |
+| `run_xref` | `true` | Run `rebar3 xref` after compilation. |
+| `run_dialyzer` | `false` | Run `rebar3 dialyzer` before Common Test. |
+| `use_checkouts` | `auto` | Include `_checkouts`: `auto`, `true`, or `false`. |
+| `output_lang` | `auto` | Runner output language: `auto`, `en`, or `cn`. |
+| `log_port` | `8081` | Host port used by the log viewer. |
+| `image_name` | `"rebar3-docker-ci"` | Docker image repository name. |
+| `log_volume` | `auto` | Docker volume name; `auto` isolates projects by name. |
 
-`output_lang` accepts `auto`, `en`, or `cn`. An automatic log volume is named
-`rebar3-docker-ci-<project>` so projects do not overwrite one another's logs.
-
-Common Test suite and case selection are intentionally not configuration
-values. They are per-run command-line options.
+Common Test suite and case selection are intentionally command-line-only.
+`--suite` may be used alone. `--case` requires `--suite`.
 
 ## Build images
 
-Build every configured Erlang/OTP image:
+Build the configured matrix:
 
 ```text
 rebar3 docker_ci build
 ```
 
-Build one version:
+Build one target image:
 
 ```text
-rebar3 docker_ci build --otp 28
+rebar3 docker_ci build --otp 29
 ```
 
-Images are tagged `<image_name>:<otp>`. They contain the Erlang environment,
-not a source snapshot, so source changes do not require rebuilding them.
+Images are tagged `<image_name>:<otp>`. They contain Erlang and Rebar3, not a
+project source snapshot, so source changes do not require rebuilding images.
 
 ## Run checks
 
-Run the configured matrix:
+Run every configured OTP target without starting the log viewer:
 
 ```text
 rebar3 docker_ci run --no-view
 ```
 
-Run one OTP version and one suite:
+Run one OTP target:
+
+```text
+rebar3 docker_ci run --otp 23 --no-view
+```
+
+Run one Common Test suite:
 
 ```text
 rebar3 docker_ci run --otp 28 --suite sample_SUITE --no-view
 ```
 
-Run one case:
+Run one case from a suite:
 
 ```text
-rebar3 docker_ci run --otp 28 \
+rebar3 docker_ci run --otp 29 \
     --suite sample_SUITE --case sample_case --no-view
 ```
 
-`--case` requires `--suite`. Other run overrides are:
+Run overrides:
 
-- `--dialyzer`: enable Dialyzer for this run.
-- `--skip-xref`: disable xref for this run.
-- `--no-checkouts`: ignore `_checkouts` for this run.
-- `--no-view`: return after checks without starting the log viewer.
+- `--dialyzer` enables Dialyzer for this run.
+- `--skip-xref` disables xref for this run.
+- `--no-checkouts` ignores the project's `_checkouts` directory.
+- `--no-view` returns after testing instead of starting Nginx.
 
-For each OTP version, the container runs `rebar3 compile`, optional
-`rebar3 xref`, optional `rebar3 dialyzer`, and `rebar3 ct`. A failed check
-skips later checks for that version, but the remaining OTP matrix still runs.
+For each OTP version the runner executes compile, optional xref, optional
+Dialyzer, and Common Test in that order. A failed step skips later steps for
+that version, while the remaining matrix continues. The command fails after
+all selected versions finish if any version failed.
 
-Tracked modifications and unignored new files are copied using `git ls-files`.
-The host project and checkout directories are mounted read-only, and host
-`_build` data is never reused.
+## Source isolation and checkouts
 
-## View logs
+The host project is mounted read-only. The container creates a temporary
+worktree using files reported by:
+
+```text
+git ls-files --cached --others --exclude-standard
+```
+
+Tracked modifications and unignored new files are tested, while host `_build`
+data is not reused. When `use_checkouts` is enabled, each checkout is mounted
+read-only and copied into the isolated worktree. Explicit `true` reports an
+error if `_checkouts` is missing or empty; `auto` simply disables checkout
+handling in that case.
+
+## Logs and coverage
+
+Run the foreground viewer after a test run:
 
 ```text
 rebar3 docker_ci logs
 rebar3 docker_ci logs --port 8082
 ```
 
-The foreground Nginx viewer serves these paths for each OTP version:
+Nginx serves the Docker log volume at:
 
 ```text
 /<otp>/ci-summary.txt
@@ -119,25 +175,29 @@ The foreground Nginx viewer serves these paths for each OTP version:
 /<otp>/cover/index.html
 ```
 
-Press Ctrl+C to stop the viewer.
+Press Ctrl+C to stop the viewer. `ci-summary.txt` records each step's status
+even when a later step is skipped.
 
-## Migration from synchronized scripts
+## Migrating synchronized CI scripts
 
-1. Remove the project's synchronized `ci_scripts` directory.
-2. Add `rebar3_docker_ci` to the developer machine's global Rebar3 plugins.
-3. Convert `ci-env.conf` values to the `docker_ci` term above.
-4. Replace script invocations with `rebar3 docker_ci build`, `run`, and
-   `logs`.
+1. Install the plugin in the developer machine's global Rebar3 configuration.
+2. Convert `ERLANG_VSNS`, `RUN_XREF`, `RUN_DIALYZER`, `USE_CHECKOUTS`,
+   `OUTPUT_LANG`, and `LOG_PORT` into the `docker_ci` term.
+3. Move suite and case selection to `--suite` and `--case` command options.
+4. Replace script calls with the `build`, `run`, and `logs` providers.
+5. Remove copied `ci_scripts` files after the new commands pass.
 
-No Astranaut dependency or synchronization launcher is required.
+The resulting project no longer depends on Astranaut or another repository for
+CI implementation files.
 
-The `otp-19` branch preserves the previous plugin implementation for developer
-machines that must run the plugin itself on Erlang/OTP 19. Its target-version
-behavior is otherwise the same.
-
-## Tests
+## Development checks
 
 ```text
+rebar3 compile
 rebar3 eunit
 rebar3 ct
 ```
+
+The plugin has also been integration-tested against Astranaut on OTP 19, 21,
+23, 28, and 29, including xref, 386 Common Test cases per full-matrix target,
+suite-only selection, case selection, log export, and coverage export.
