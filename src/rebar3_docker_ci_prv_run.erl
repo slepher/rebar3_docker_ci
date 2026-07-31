@@ -13,18 +13,26 @@ init(State) ->
                   {deps, []},
                   {example, "rebar3 docker_ci run --otp 28 --suite sample_SUITE"},
                   {short_desc, "Run Rebar3 checks in Docker."},
-                  {desc, "Run compile, xref, optional Dialyzer, and Common Test."},
+                  {desc, "Run compile, xref, optional Dialyzer, and Common Test. "
+                         "--suite may be used alone; --case requires --suite."},
                   {opts, opts()}]),
     {ok, rebar_state:add_provider(State, Provider)}.
 
 opts() ->
-    [{otp, $o, "otp", string, "Run only this Erlang/OTP version."},
-     {suite, $s, "suite", string, "Run one Common Test suite."},
-     {'case', $c, "case", string, "Run one case from --suite."},
-     {dialyzer, $d, "dialyzer", boolean, "Enable Dialyzer."},
-     {skip_xref, undefined, "skip-xref", boolean, "Disable xref."},
-     {no_checkouts, undefined, "no-checkouts", boolean, "Ignore _checkouts."},
-     {no_view, undefined, "no-view", boolean, "Do not start the log viewer."}].
+    [{otp, $o, "otp", string,
+      "Run only this Erlang/OTP version instead of the configured matrix."},
+     {suite, $s, "suite", string,
+      "Run one Common Test suite; may be used without --case."},
+     {'case', $c, "case", string,
+      "Run one Common Test case; requires --suite."},
+     {dialyzer, $d, "dialyzer", boolean,
+      "Enable Dialyzer for this run."},
+     {skip_xref, undefined, "skip-xref", boolean,
+      "Disable xref for this run."},
+     {no_checkouts, undefined, "no-checkouts", boolean,
+      "Ignore the project's _checkouts directory for this run."},
+     {no_view, undefined, "no-view", boolean,
+      "Return after the checks instead of starting the log viewer."}].
 
 do(State) ->
     Options = parsed_options(State),

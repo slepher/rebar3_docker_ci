@@ -13,12 +13,14 @@ init(State) ->
                   {deps, []},
                   {example, "rebar3 docker_ci logs --port 8082"},
                   {short_desc, "Serve Docker CI logs."},
-                  {desc, "Serve summaries, Common Test logs, and coverage via Nginx."},
+                  {desc, "Serve summaries, Common Test logs, and coverage via Nginx. "
+                         "Use --port to override log_port for this command."},
                   {opts, opts()}]),
     {ok, rebar_state:add_provider(State, Provider)}.
 
 opts() ->
-    [{port, $p, "port", integer, "Override the log viewer port."}].
+    [{port, $p, "port", integer,
+      "Override the configured log_port (1-65535)."}].
 
 do(State) ->
     maybe

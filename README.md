@@ -53,7 +53,13 @@ Confirm that Rebar3 can see the providers:
 
 ```text
 rebar3 help docker_ci
+rebar3 help docker_ci build
+rebar3 help docker_ci run
+rebar3 help docker_ci logs
 ```
+
+The first command lists the available tasks. The task-specific forms show every
+option, including `--otp`, `--suite`, `--case`, and their constraints.
 
 The target project's `rebar.config` contains only the `docker_ci` settings. Do
 not add `rebar3_docker_ci` to its `project_plugins`.

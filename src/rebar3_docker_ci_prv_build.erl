@@ -13,12 +13,14 @@ init(State) ->
                   {deps, []},
                   {example, "rebar3 docker_ci build --otp 28"},
                   {short_desc, "Build Erlang/OTP Docker CI images."},
-                  {desc, "Build the configured Erlang/OTP Docker CI image matrix."},
+                  {desc, "Build the configured Erlang/OTP Docker CI image matrix. "
+                         "Use --otp to override erlang_versions for this command."},
                   {opts, opts()}]),
     {ok, rebar_state:add_provider(State, Provider)}.
 
 opts() ->
-    [{otp, $o, "otp", string, "Build only this Erlang/OTP version."}].
+    [{otp, $o, "otp", string,
+      "Build only this Erlang/OTP version instead of the configured matrix."}].
 
 do(State) ->
     maybe

@@ -51,7 +51,13 @@ rebar3 docker_ci logs
 
 ```text
 rebar3 help docker_ci
+rebar3 help docker_ci build
+rebar3 help docker_ci run
+rebar3 help docker_ci logs
 ```
+
+第一条命令列出所有任务；后三条命令分别显示完整参数，包括 `--otp`、
+`--suite`、`--case` 及其使用约束。
 
 被测项目的 `rebar.config` 只需要保存 `docker_ci` 配置，不要将插件添加到
 `project_plugins`。
