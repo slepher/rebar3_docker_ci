@@ -13,9 +13,9 @@ name(State) ->
     end.
 
 safe_name(Value) ->
-    Chars = lowercase(to_list(Value)),
-    Sanitized = sanitize(Chars, [], false),
-    case trim_hyphens(lists:reverse(Sanitized)) of
+    Lowercase = string:lowercase(to_list(Value)),
+    Sanitized = re:replace(Lowercase, "[^a-z0-9]+", "-", [global, {return, list}]),
+    case string:trim(Sanitized, both, "-") of
         [] -> "project";
         Name -> Name
     end.
@@ -70,31 +70,6 @@ canonical_path(Path) ->
         {error, _Reason} ->
             Absolute
     end.
-
-sanitize([], Acc, _Separator) ->
-    Acc;
-sanitize([Char | Rest], Acc, _Separator)
-  when Char >= $a, Char =< $z; Char >= $0, Char =< $9 ->
-    sanitize(Rest, [Char | Acc], false);
-sanitize([_Char | Rest], Acc, true) ->
-    sanitize(Rest, Acc, true);
-sanitize([_Char | Rest], Acc, false) ->
-    sanitize(Rest, [$- | Acc], true).
-
-trim_hyphens(Value) ->
-    trim_right_hyphens(trim_left_hyphens(Value)).
-
-trim_left_hyphens([$- | Rest]) -> trim_left_hyphens(Rest);
-trim_left_hyphens(Value) -> Value.
-
-trim_right_hyphens(Value) ->
-    lists:reverse(trim_left_hyphens(lists:reverse(Value))).
-
-lowercase(Value) ->
-    [lowercase_char(Char) || Char <- Value].
-
-lowercase_char(Char) when Char >= $A, Char =< $Z -> Char + 32;
-lowercase_char(Char) -> Char.
 
 to_list(Value) when is_binary(Value) -> binary_to_list(Value);
 to_list(Value) when is_atom(Value) -> atom_to_list(Value);

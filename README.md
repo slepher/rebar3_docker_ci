@@ -4,27 +4,25 @@
 isolated Docker worktrees. Host-side operation is implemented as Rebar3
 providers, so consumer projects do not copy or synchronize CI scripts.
 
-The plugin source supports Erlang/OTP 19 and newer.
+The plugin runs on Erlang/OTP 27 and newer. This host requirement is
+independent of the Erlang/OTP versions used to compile and test the target
+project in Docker; target projects may still run on OTP 19 or other legacy
+releases.
 
 ## Installation
 
-Add the plugin to the project `rebar.config`:
+Add the plugin to the developer machine's global Rebar3 configuration at
+`~/.config/rebar3/rebar.config`:
 
 ```erlang
-{project_plugins, [
-    {rebar3_docker_ci, "0.1.0"}
+{plugins, [
+    {rebar3_docker_ci, "0.2.0"}
 ]}.
 ```
 
-During local plugin development, a Rebar3 checkout can be used instead:
-
-```text
-_checkouts/rebar3_docker_ci -> /path/to/rebar3_docker_ci
-```
-
-```erlang
-{project_plugins, [rebar3_docker_ci]}.
-```
+Do not add the plugin to the target project's `project_plugins`. Project
+plugins are loaded again when Rebar3 runs inside the target container, which
+would make a legacy target OTP compile the OTP 27 host plugin.
 
 Docker Desktop or Docker Engine must be available in `PATH`.
 
@@ -126,12 +124,16 @@ Press Ctrl+C to stop the viewer.
 ## Migration from synchronized scripts
 
 1. Remove the project's synchronized `ci_scripts` directory.
-2. Add `rebar3_docker_ci` to `project_plugins`.
+2. Add `rebar3_docker_ci` to the developer machine's global Rebar3 plugins.
 3. Convert `ci-env.conf` values to the `docker_ci` term above.
 4. Replace script invocations with `rebar3 docker_ci build`, `run`, and
    `logs`.
 
 No Astranaut dependency or synchronization launcher is required.
+
+The `otp-19` branch preserves the previous plugin implementation for developer
+machines that must run the plugin itself on Erlang/OTP 19. Its target-version
+behavior is otherwise the same.
 
 ## Tests
 

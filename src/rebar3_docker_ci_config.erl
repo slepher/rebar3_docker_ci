@@ -3,33 +3,35 @@
 -export([load/1, from_list/1, get/2]).
 
 -define(DEFAULTS,
-        [{erlang_versions, ["19", "28"]},
-         {run_xref, true},
-         {run_dialyzer, false},
-         {use_checkouts, auto},
-         {output_lang, auto},
-         {log_port, 8081},
-         {image_name, "rebar3-docker-ci"},
-         {log_volume, auto}]).
+        #{erlang_versions => ["19", "28"],
+          run_xref => true,
+          run_dialyzer => false,
+          use_checkouts => auto,
+          output_lang => auto,
+          log_port => 8081,
+          image_name => "rebar3-docker-ci",
+          log_volume => auto}).
 
 load(State) ->
     from_list(rebar_state:get(State, docker_ci, [])).
 
 from_list(Options) when is_list(Options) ->
-    case validate_keys(Options) of
-        ok -> normalize(?DEFAULTS, Options, []);
-        Error -> Error
+    maybe
+        ok ?= validate_keys(Options),
+        normalize(maps:to_list(?DEFAULTS), maps:from_list(Options), #{})
+    else
+        {error, _Reason} = Error -> Error
     end;
 from_list(Value) ->
     {error, {invalid_config, docker_ci, Value}}.
 
 get(Key, Config) ->
-    proplists:get_value(Key, Config).
+    maps:get(Key, Config).
 
 validate_keys([]) ->
     ok;
 validate_keys([{Key, _Value} | Rest]) ->
-    case lists:keymember(Key, 1, ?DEFAULTS) of
+    case maps:is_key(Key, ?DEFAULTS) of
         true -> validate_keys(Rest);
         false -> {error, {unknown_config, Key}}
     end;
@@ -37,11 +39,11 @@ validate_keys([Value | _Rest]) ->
     {error, {invalid_config, docker_ci, Value}}.
 
 normalize([], _Options, Acc) ->
-    {ok, lists:reverse(Acc)};
+    {ok, Acc};
 normalize([{Key, Default} | Rest], Options, Acc) ->
-    Value = proplists:get_value(Key, Options, Default),
+    Value = maps:get(Key, Options, Default),
     case normalize_value(Key, Value) of
-        {ok, Normalized} -> normalize(Rest, Options, [{Key, Normalized} | Acc]);
+        {ok, Normalized} -> normalize(Rest, Options, Acc#{Key => Normalized});
         error -> {error, {invalid_config, Key, Value}}
     end.
 

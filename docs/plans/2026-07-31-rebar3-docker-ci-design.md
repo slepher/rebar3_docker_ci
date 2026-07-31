@@ -6,7 +6,9 @@ Build a standalone `rebar3_docker_ci` plugin that provides the local Docker CI
 capabilities currently stored in `astranaut/ci_scripts`. Consumer projects must
 not depend on Astranaut or synchronize host scripts.
 
-The plugin itself must compile on Erlang/OTP 19 and newer.
+The original plugin baseline compiles on Erlang/OTP 19 and is preserved on the
+`otp-19` branch. The main branch requires OTP 27 for the host-side plugin while
+continuing to support legacy target OTP releases through Docker.
 
 ## User Interface
 
@@ -90,7 +92,9 @@ options into calls to configuration, project, and Docker modules. Domain
 modules return structured errors, and providers expose them through
 `format_error/1`.
 
-All Erlang code avoids syntax and library calls introduced after OTP 19.
+The `otp-19` branch avoids syntax and library calls introduced after OTP 19.
+The main branch uses OTP 27 syntax and standard-library APIs; this does not
+change the OTP version used inside target containers.
 
 ## Build Flow
 

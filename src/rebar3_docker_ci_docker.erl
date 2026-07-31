@@ -19,22 +19,22 @@ create_volume_args(Volume) ->
     ["volume", "create", Volume].
 
 run_args(Context, Version) ->
-    ProjectRoot = value(project_root, Context),
-    ScriptsDir = value(scripts_dir, Context),
-    Image = value(image_name, Context) ++ ":" ++ Version,
+    ProjectRoot = maps:get(project_root, Context),
+    ScriptsDir = maps:get(scripts_dir, Context),
+    Image = maps:get(image_name, Context) ++ ":" ++ Version,
     Base = ["run", "--rm"] ++
         env("ERLANG_VER", Version) ++
-        env("PROJECT_NAME", value(project_name, Context)) ++
-        env("TEST_SUITE", value(test_suite, Context)) ++
-        env("TEST_CASE", value(test_case, Context)) ++
-        env("RUN_XREF", bool_string(value(run_xref, Context))) ++
-        env("RUN_DIALYZER", bool_string(value(run_dialyzer, Context))) ++
-        env("USE_CHECKOUTS", bool_string(value(use_checkouts, Context))) ++
-        env("OUTPUT_LANG", atom_to_list(value(output_lang, Context))) ++
+        env("PROJECT_NAME", maps:get(project_name, Context)) ++
+        env("TEST_SUITE", maps:get(test_suite, Context)) ++
+        env("TEST_CASE", maps:get(test_case, Context)) ++
+        env("RUN_XREF", bool_string(maps:get(run_xref, Context))) ++
+        env("RUN_DIALYZER", bool_string(maps:get(run_dialyzer, Context))) ++
+        env("USE_CHECKOUTS", bool_string(maps:get(use_checkouts, Context))) ++
+        env("OUTPUT_LANG", atom_to_list(maps:get(output_lang, Context))) ++
         ["--volume", ProjectRoot ++ ":/mnt/source:ro",
          "--volume", ScriptsDir ++ ":/mnt/scripts:ro",
-         "--volume", value(log_volume, Context) ++ ":/mnt/logs"],
-    Base ++ checkout_args(value(checkouts, Context)) ++
+         "--volume", maps:get(log_volume, Context) ++ ":/mnt/logs"],
+    Base ++ checkout_args(maps:get(checkouts, Context)) ++
         [Image, "bash", "/mnt/scripts/inner_test.sh"].
 
 viewer_args(Volume, Port) ->
@@ -113,6 +113,3 @@ checkout_args(Checkouts) ->
 
 bool_string(true) -> "true";
 bool_string(false) -> "false".
-
-value(Key, Values) ->
-    proplists:get_value(Key, Values).

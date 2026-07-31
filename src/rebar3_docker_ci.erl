@@ -1,5 +1,16 @@
 -module(rebar3_docker_ci).
 
+-moduledoc """
+Docker-backed CI providers for Rebar3 projects.
+
+The plugin runs on the developer host. Target projects are compiled and tested
+inside independently versioned Erlang/OTP containers.
+""".
+
+-if(?OTP_RELEASE < 27).
+-error("rebar3_docker_ci requires Erlang/OTP 27 or newer").
+-endif.
+
 -export([init/1, provider_modules/0, format_error/1]).
 
 init(State) ->

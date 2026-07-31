@@ -4,6 +4,7 @@
 
 defaults_test() ->
     {ok, Config} = rebar3_docker_ci_config:from_list([]),
+    ?assert(is_map(Config)),
     ?assertEqual(["19", "28"], value(erlang_versions, Config)),
     ?assertEqual(true, value(run_xref, Config)),
     ?assertEqual(false, value(run_dialyzer, Config)),

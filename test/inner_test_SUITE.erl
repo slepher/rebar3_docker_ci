@@ -28,7 +28,7 @@ init_per_testcase(Name, Config) ->
      {work, Work}, {calls, filename:join(Base, "calls.txt")} | Config].
 
 end_per_testcase(_Name, Config) ->
-    remove_tree(?config(base, Config)).
+    file:del_dir_r(?config(base, Config)).
 
 suite_and_case(Config) ->
     Environment = base_environment(Config) ++
@@ -111,18 +111,8 @@ fake_rebar_script() ->
       "fi\n">>.
 
 ensure_clean_dir(Path) ->
-    ok = remove_tree(Path),
+    _ = file:del_dir_r(Path),
     filelib:ensure_dir(filename:join(Path, "placeholder")).
-
-remove_tree(Path) ->
-    case file:list_dir(Path) of
-        {ok, Entries} ->
-            lists:foreach(fun(Entry) -> remove_tree(filename:join(Path, Entry)) end,
-                          Entries),
-            file:del_dir(Path);
-        {error, enotdir} -> file:delete(Path);
-        {error, enoent} -> ok
-    end.
 
 write_file(Path, Data) ->
     ok = filelib:ensure_dir(Path),
@@ -133,4 +123,4 @@ read_file(Path) ->
     binary_to_list(Data).
 
 contains(Haystack, Needle) ->
-    string:str(Haystack, Needle) > 0.
+    string:find(Haystack, Needle) =/= nomatch.

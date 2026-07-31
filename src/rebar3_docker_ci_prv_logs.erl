@@ -21,48 +21,46 @@ opts() ->
     [{port, $p, "port", integer, "Override the log viewer port."}].
 
 do(State) ->
-    case rebar3_docker_ci_config:load(State) of
-        {ok, Config} -> serve(State, Config);
+    maybe
+        {ok, Config} ?= rebar3_docker_ci_config:load(State),
+        ProjectName = rebar3_docker_ci_project:name(State),
+        Volume = rebar3_docker_ci_project:volume_name(
+                   rebar3_docker_ci_config:get(log_volume, Config), ProjectName),
+        Options = parsed_options(State),
+        Port = maps:get(port, Options,
+                        rebar3_docker_ci_config:get(log_port, Config)),
+        {ok, ValidPort} ?= validate_port(Port),
+        ok ?= ensure_volume_exists(Volume),
+        print_links(Config, Volume, ValidPort),
+        ok ?= rebar3_docker_ci_docker:execute(
+                 rebar3_docker_ci_docker:viewer_args(Volume, ValidPort)),
+        {ok, State}
+    else
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
 format_error(Reason) ->
     rebar3_docker_ci:format_error(Reason).
 
-serve(State, Config) ->
-    ProjectName = rebar3_docker_ci_project:name(State),
-    Volume = rebar3_docker_ci_project:volume_name(
-               rebar3_docker_ci_config:get(log_volume, Config), ProjectName),
-    Options = parsed_options(State),
-    Port = proplists:get_value(
-             port, Options, rebar3_docker_ci_config:get(log_port, Config)),
-    case validate_port(Port) of
-        {ok, ValidPort} -> serve_port(State, Config, Volume, ValidPort);
-        {error, Reason} -> {error, {?MODULE, Reason}}
-    end.
-
 validate_port(Port) when is_integer(Port), Port > 0, Port < 65536 ->
     {ok, Port};
 validate_port(Port) ->
     {error, {invalid_port, Port}}.
 
-serve_port(State, Config, Volume, Port) ->
-    Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+ensure_volume_exists(Volume) ->
     case rebar3_docker_ci_docker:execute_quiet(
            rebar3_docker_ci_docker:inspect_volume_args(Volume)) of
-        ok ->
-            lists:foreach(fun(Version) -> print_links(Version, Port, Volume) end,
-                          Versions),
-            case rebar3_docker_ci_docker:execute(
-                   rebar3_docker_ci_docker:viewer_args(Volume, Port)) of
-                ok -> {ok, State};
-                {error, Reason} -> {error, {?MODULE, Reason}}
-            end;
+        ok -> ok;
         {error, _Reason} ->
-            {error, {?MODULE, {log_volume_missing, Volume}}}
+            {error, {log_volume_missing, Volume}}
     end.
 
-print_links(Version, Port, Volume) ->
+print_links(Config, Volume, Port) ->
+    Versions = rebar3_docker_ci_config:get(erlang_versions, Config),
+    lists:foreach(fun(Version) -> print_version_links(Version, Port, Volume) end,
+                  Versions).
+
+print_version_links(Version, Port, Volume) ->
     Base = "http://localhost:" ++ integer_to_list(Port) ++ "/" ++ Version,
     print_if_present(Volume, Version ++ "/ci-summary.txt",
                      "OTP ~s summary: ~s/ci-summary.txt", [Version, Base]),
@@ -85,6 +83,6 @@ present(Volume, Path) ->
 
 parsed_options(State) ->
     case rebar_state:command_parsed_args(State) of
-        {Options, _Arguments} -> Options;
-        Options when is_list(Options) -> Options
+        {Options, _Arguments} -> maps:from_list(Options);
+        Options when is_list(Options) -> maps:from_list(Options)
     end.

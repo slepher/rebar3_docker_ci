@@ -2,11 +2,11 @@
 
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement an OTP 19-compatible Rebar3 plugin that replaces Astranaut's synchronized Docker CI scripts with `rebar3 docker_ci` providers.
+**Goal:** Implement an OTP 19-compatible baseline, preserved on `otp-19`, that replaces Astranaut's synchronized Docker CI scripts with `rebar3 docker_ci` providers; the main branch subsequently raises the host plugin baseline to OTP 27.
 
 **Architecture:** Rebar3 providers perform all host-side configuration and Docker orchestration. Packaged `priv` resources perform only the isolated Linux-container test flow. Pure argument-building functions and an injectable command runner keep ordinary tests independent from Docker.
 
-**Tech Stack:** Erlang/OTP 19+, Rebar3 provider API, EUnit, Common Test, Bash inside official Erlang Docker images.
+**Tech Stack:** Erlang/OTP 27+ on the main branch, OTP 19+ on the `otp-19` branch, Rebar3 provider API, EUnit, Common Test, Bash inside official Erlang Docker images.
 
 ---
 

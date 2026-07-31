@@ -29,7 +29,7 @@ checkout_modes_test() ->
         ?assertEqual({ok, []},
                      rebar3_docker_ci_project:resolve_checkouts(Root, false))
     after
-        remove_tree(Root)
+        ok = file:del_dir_r(Root)
     end.
 
 temp_dir(Name) ->
@@ -38,13 +38,3 @@ temp_dir(Name) ->
                               integer_to_list(erlang:unique_integer([positive]))),
     ok = file:make_dir(Dir),
     Dir.
-
-remove_tree(Path) ->
-    case file:list_dir(Path) of
-        {ok, Entries} ->
-            lists:foreach(fun(Entry) -> remove_tree(filename:join(Path, Entry)) end,
-                          Entries),
-            ok = file:del_dir(Path);
-        {error, enotdir} -> ok = file:delete(Path);
-        {error, enoent} -> ok
-    end.
