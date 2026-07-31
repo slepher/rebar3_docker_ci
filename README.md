@@ -16,7 +16,7 @@ Add the plugin to the developer machine's global Rebar3 configuration at
 
 ```erlang
 {plugins, [
-    {rebar3_docker_ci, "0.2.0"}
+    {rebar3_docker_ci, "0.1.0"}
 ]}.
 ```
 
