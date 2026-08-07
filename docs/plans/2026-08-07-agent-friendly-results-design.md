@@ -187,12 +187,10 @@ compile/xref/dialyzer 失败时,显示对应检查名作为失败阶段,
 
 ## 兼容性与发布
 
-命令与配置均为破坏性变更,两个分支统一使用 `0.3.0`:
-
-- `master` 标签:`0.3.0`,宿主基线 OTP 27;
-- `otp-19` 标签:`otp-19-0.3.0`,宿主基线 OTP 19。
-
-两个分支行为一致,各自沿用现有的 Erlang 语法。
+命令与配置均为破坏性变更,统一使用 `0.3.x`。插件宿主支持 OTP 21 及以上;
+目标镜像可任意选择 OTP 版本。目标 OTP 21 之前(如 19)时,插件需安装在
+全局 `rebar.config`;目标均为 OTP 21+ 时可直接放在项目的
+`project_plugins` 中。
 
 ## Agent 使用契约
 
@@ -219,5 +217,5 @@ compile/xref/dialyzer 失败时,显示对应检查名作为失败阶段,
   `log_volume` 报错、结果目录路径构造,以及由 fixture
   `ci-summary.txt`/`failures.txt` 生成主结果文件 `ci-results.txt` 的格式
   (通过目标单行、失败目标概要加日志链接、整体覆盖)。
-- 两个分支均跑完整 EUnit 与 Common Test 套件;OTP 19 分支额外在
-  OTP 19 镜像内编译并测试。
+- 完整 EUnit 与 Common Test 套件;插件自身在 OTP 21 到 29 的全部镜像内
+  编译并测试。

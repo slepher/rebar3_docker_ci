@@ -17,13 +17,20 @@ rebar3 docker_ci logs
 
 The plugin host and the project under test have independent OTP requirements:
 
-- Release `0.3.1` runs the plugin on Erlang/OTP 21 or newer.
-- Tag `otp-19-0.3.1` preserves a host plugin compatible with OTP 19.
-- Test targets may use older or newer OTP releases provided by Docker images.
+- The plugin runs on Erlang/OTP 21 or newer.
+- Test targets may use any OTP release provided by the Docker images.
 
-Install the plugin globally on the developer machine. Do not list it in the
-target project's `project_plugins`: project plugins are loaded inside the test
-container and would couple the target OTP to the host plugin requirement.
+### Installing the plugin
+
+The plugin is loaded on the developer host. Because project plugins are also
+loaded inside the test container, the plugin must compile on every target OTP:
+
+- Configure `erlang_versions` from OTP 21 upward: the plugin can be declared
+  as a `project_plugin` in the target project's `rebar.config` next to the
+  `docker_ci` settings.
+- Configure images older than OTP 21 (for example OTP 19): the plugin cannot
+  compile inside those containers, so install it in the global configuration
+  at `~/.config/rebar3/rebar.config` instead, and keep it out of the project.
 
 ## Requirements
 
@@ -32,14 +39,22 @@ container and would couple the target OTP to the host plugin requirement.
 - Docker Desktop or Docker Engine available in `PATH`
 - Git when the project is a Git worktree
 
-Use `otp-19-0.3.1` when the developer machine itself must run OTP 19.
-
 ## Installation
 
-Add the plugin to `~/.config/rebar3/rebar.config`:
+Global installation (required when target images use OTP older than 21):
 
 ```erlang
 {plugins, [
+    {rebar3_docker_ci,
+     {git, "https://github.com/slepher/rebar3_docker_ci.git",
+      {tag, "0.3.1"}}}
+]}.
+```
+
+Project installation (sufficient when every target image is OTP 21 or newer):
+
+```erlang
+{project_plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
       {tag, "0.3.1"}}}
@@ -56,7 +71,8 @@ rebar3 help docker_ci run
 rebar3 help docker_ci logs
 ```
 
-The target project's `rebar.config` contains only the `docker_ci` settings.
+The target project's `rebar.config` contains only the `docker_ci` settings
+(and the optional `project_plugins` entry).
 
 ## Project configuration
 
@@ -225,5 +241,6 @@ for CI implementation files.
 rebar3 do compile, eunit, ct
 ```
 
-The plugin is integration-tested against Astranaut on OTP 19, 21, 23, 28, and
-29, including xref, Common Test, suite/case selection, log export, and coverage.
+The plugin is integration-tested against Astranaut on OTP 21, 23, 28, and 29,
+including xref, Common Test, suite/case selection, log export, and coverage.
+The plugin also self-tests on every OTP from 21 through 29.

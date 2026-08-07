@@ -17,13 +17,18 @@ rebar3 docker_ci logs
 
 插件宿主版本和被测项目版本彼此独立：
 
-- `0.3.1` 要求开发机使用 Erlang/OTP 21 或更高版本运行插件。
-- `otp-19-0.3.1` 保留可在 OTP 19 开发机上运行的插件版本。
-- 测试目标可以使用 Docker 镜像提供的更旧或更新 OTP 版本。
+- 插件要求开发机使用 Erlang/OTP 21 或更高版本运行。
+- 测试目标可以使用 Docker 镜像提供的任意 OTP 版本。
 
-插件必须安装在开发机的 Rebar3 全局配置中，不能加入被测项目的
-`project_plugins`。项目插件会在测试容器内再次加载，使目标 OTP 错误地依赖
-宿主插件所要求的 OTP 版本。
+### 插件安装位置
+
+插件在开发机宿主上加载。项目插件也会在测试容器内加载，因此插件必须在每个
+目标 OTP 上都能编译：
+
+- 配置的 `erlang_versions` 从 OTP 21 起：插件可以作为 `project_plugin` 直接
+  声明在被测项目的 `rebar.config` 中，与 `docker_ci` 配置放在一起。
+- 配置了 OTP 21 之前的镜像(例如 OTP 19)：插件无法在这些容器内编译，
+  必须安装在全局配置 `~/.config/rebar3/rebar.config` 中，不能放在项目里。
 
 ## 环境要求
 
@@ -32,14 +37,22 @@ rebar3 docker_ci logs
 - `PATH` 中可用的 Docker Desktop 或 Docker Engine
 - 项目使用 Git 工作树时需要 Git
 
-开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.3.1`。
-
 ## 安装
 
-在开发机全局配置 `~/.config/rebar3/rebar.config` 中添加：
+全局安装(目标镜像包含 OTP 21 之前的版本时必须使用这种方式)：
 
 ```erlang
 {plugins, [
+    {rebar3_docker_ci,
+     {git, "https://github.com/slepher/rebar3_docker_ci.git",
+      {tag, "0.3.1"}}}
+]}.
+```
+
+项目内安装(所有目标镜像均为 OTP 21 或更新时足够)：
+
+```erlang
+{project_plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
       {tag, "0.3.1"}}}
@@ -56,7 +69,8 @@ rebar3 help docker_ci run
 rebar3 help docker_ci logs
 ```
 
-被测项目的 `rebar.config` 只保存 `docker_ci` 配置。
+被测项目的 `rebar.config` 只保存 `docker_ci` 配置(以及可选的
+`project_plugins` 条目)。
 
 ## 项目配置
 
@@ -215,5 +229,6 @@ Nginx 从结果目录提供以下路径：
 rebar3 do compile, eunit, ct
 ```
 
-插件使用 Astranaut 在 OTP 19、21、23、28、29 上执行真实集成测试，包括 xref、
-Common Test、suite/case 选择、日志导出和覆盖率导出。
+插件使用 Astranaut 在 OTP 21、23、28、29 上执行真实集成测试，包括 xref、
+Common Test、suite/case 选择、日志导出和覆盖率导出。插件自身也会在
+OTP 21 到 29 的全部版本上自检。
