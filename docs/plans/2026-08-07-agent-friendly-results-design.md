@@ -178,9 +178,10 @@ compile/xref/dialyzer 失败时,显示对应检查名作为失败阶段,
 
 - `log_volume` 在 `0.3.0` 移除;配置它时报"已移除选项"并给出指引
   (与 `0.2.0` 移除 `image_name` 的模式一致)。
-- 新增 `test_framework`:`common_test`(或 `ct`,默认)或 `eunit`。
-  `eunit` 时运行 `rebar3 eunit`(不执行 CT 失败提取,`--suite`/`--case`
-  报错),摘要键与日志文件名为 `eunit`。
+- 新增 `run_ct`(默认 `true`)与 `run_eunit`(默认 `false`)两个独立布尔参数;
+  可同时启用,两个框架互不跳过(`--suite`/`--case` 要求 `run_ct=true`)。
+  摘要键与日志文件名分别为 `common_test`/`eunit`。
+  兼容旧 OTP 时,runner 内不使用 `[[:space:]]` 等 mawk 不支持的 POSIX 类。
 - `log_port` 保留,用于 opt-in 查看器与 `logs` provider。
 - `.gitignore` 已覆盖 `_build`,无需修改。
 

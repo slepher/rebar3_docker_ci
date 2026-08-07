@@ -53,10 +53,10 @@ common_test_selection_test_() ->
      {"case without suite", ?_assertMatch({error, case_requires_suite},
                                            rebar3_docker_ci_prv_run:validate_selection("", "works"))},
      {"eunit all", ?_assertEqual({ok, {"", ""}},
-                                  rebar3_docker_ci_prv_run:validate_selection("", "", eunit))},
-     {"eunit with suite",
-      ?_assertMatch({error, {selection_requires_common_test, eunit}},
-                    rebar3_docker_ci_prv_run:validate_selection("a_SUITE", "", eunit))}].
+                                  rebar3_docker_ci_prv_run:validate_selection("", "", false))},
+     {"suite with ct disabled",
+      ?_assertMatch({error, {selection_requires_ct, _}},
+                    rebar3_docker_ci_prv_run:validate_selection("a_SUITE", "", false))}].
 
 provider_option_names_test() ->
     ?assertEqual([], option_names(rebar3_docker_ci_prv_config:opts())),

@@ -24,24 +24,37 @@ opts() ->
       "Override the configured log_port (1-65535)."}].
 
 do(State) ->
-    maybe
-        {ok, Config} ?= rebar3_docker_ci_config:load(State),
-        ProjectName = rebar3_docker_ci_project:name(State),
-        Root = rebar3_docker_ci_project:root(),
-        ResultsDir = rebar3_docker_ci_project:results_dir(Root),
-        ok ?= ensure_results_dir_exists(ResultsDir),
-        Options = parsed_options(State),
-        Port = maps:get(port, Options,
-                        rebar3_docker_ci_config:get(log_port, Config)),
-        {ok, ValidPort} ?= validate_port(Port),
-        Images = rebar3_docker_ci_config:get(target_images, Config),
-        {ok, Targets} ?= rebar3_docker_ci_targets:resolve(Images),
-        Versions = [maps:get(otp, Target) || Target <- Targets],
-        print_links(ProjectName, Versions, ResultsDir, ValidPort),
-        ok ?= rebar3_docker_ci_docker:execute(
-                 rebar3_docker_ci_docker:viewer_args(ResultsDir, ValidPort)),
-        {ok, State}
-    else
+    case rebar3_docker_ci_config:load(State) of
+        {ok, Config} ->
+            ProjectName = rebar3_docker_ci_project:name(State),
+            Root = rebar3_docker_ci_project:root(),
+            ResultsDir = rebar3_docker_ci_project:results_dir(Root),
+            case ensure_results_dir_exists(ResultsDir) of
+                ok ->
+                    run_viewer(State, Config, ProjectName, ResultsDir);
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
+        {error, Reason} -> {error, {?MODULE, Reason}}
+    end.
+
+run_viewer(State, Config, ProjectName, ResultsDir) ->
+    Options = parsed_options(State),
+    Port = maps:get(port, Options,
+                    rebar3_docker_ci_config:get(log_port, Config)),
+    case validate_port(Port) of
+        {ok, ValidPort} ->
+            Images = rebar3_docker_ci_config:get(target_images, Config),
+            case rebar3_docker_ci_targets:resolve(Images) of
+                {ok, Targets} ->
+                    Versions = [maps:get(otp, Target) || Target <- Targets],
+                    print_links(ProjectName, Versions, ResultsDir, ValidPort),
+                    case rebar3_docker_ci_docker:execute(
+                           rebar3_docker_ci_docker:viewer_args(ResultsDir, ValidPort)) of
+                        ok -> {ok, State};
+                        {error, Reason} -> {error, {?MODULE, Reason}}
+                    end;
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 

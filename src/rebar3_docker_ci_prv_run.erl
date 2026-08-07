@@ -4,7 +4,6 @@
 
 -export([init/1, do/1, format_error/1, opts/0, validate_selection/2,
          validate_selection/3, matrix_results/2]).
-
 init(State) ->
     Provider = providers:create(
                  [{name, run},
@@ -40,44 +39,47 @@ do(State) ->
     Options = parsed_options(State),
     Suite = option_string(suite, Options),
     TestCase = option_string('case', Options),
-    maybe
-        {ok, Config} ?= rebar3_docker_ci_config:load(State),
-        Framework = rebar3_docker_ci_config:get(test_framework, Config),
-        {ok, Selection} ?= validate_selection(Suite, TestCase, Framework),
-        load_and_run(State, Options, Selection)
-    else
+    case rebar3_docker_ci_config:load(State) of
+        {ok, Config} ->
+            RunCt = rebar3_docker_ci_config:get(run_ct, Config),
+            case validate_selection(Suite, TestCase, RunCt) of
+                {ok, Selection} -> load_and_run(State, Options, Selection);
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
 validate_selection(Suite, TestCase) ->
-    validate_selection(Suite, TestCase, common_test).
+    validate_selection(Suite, TestCase, true).
 
-validate_selection("", "", _Framework) -> {ok, {"", ""}};
-validate_selection("", _TestCase, _Framework) -> {error, case_requires_suite};
-validate_selection(Suite, TestCase, Framework) ->
-    case {Suite, Framework} of
-        {_Suite, common_test} -> {ok, {Suite, TestCase}};
-        {_Suite, _Framework} -> {error, {selection_requires_common_test, Framework}}
+validate_selection("", "", _RunCt) -> {ok, {"", ""}};
+validate_selection("", _TestCase, _RunCt) -> {error, case_requires_suite};
+validate_selection(Suite, TestCase, RunCt) ->
+    case RunCt of
+        true -> {ok, {Suite, TestCase}};
+        false -> {error, {selection_requires_ct, Suite}}
     end.
 
 format_error(Reason) ->
     rebar3_docker_ci:format_error(Reason).
 
 load_and_run(State, Options, Selection) ->
-    maybe
-        {ok, Config} ?= rebar3_docker_ci_config:load(State),
-        Root = rebar3_docker_ci_project:root(),
-        ProjectName = rebar3_docker_ci_project:name(State),
-        CheckoutMode = case maps:get(no_checkouts, Options, false) of
-                           true -> false;
-                           false -> rebar3_docker_ci_config:get(use_checkouts, Config)
-                       end,
-        {ok, Checkouts} ?=
-            rebar3_docker_ci_project:resolve_checkouts(Root, CheckoutMode),
-        {Suite, TestCase} = Selection,
-        run_with_project(State, Options, Suite, TestCase, Config,
-                         Root, ProjectName, Checkouts)
-    else
+    case rebar3_docker_ci_config:load(State) of
+        {ok, Config} ->
+            Root = rebar3_docker_ci_project:root(),
+            ProjectName = rebar3_docker_ci_project:name(State),
+            CheckoutMode = case maps:get(no_checkouts, Options, false) of
+                               true -> false;
+                               false ->
+                                   rebar3_docker_ci_config:get(use_checkouts, Config)
+                           end,
+            case rebar3_docker_ci_project:resolve_checkouts(Root, CheckoutMode) of
+                {ok, Checkouts} ->
+                    {Suite, TestCase} = Selection,
+                    run_with_project(State, Options, Suite, TestCase, Config,
+                                     Root, ProjectName, Checkouts);
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
@@ -85,38 +87,58 @@ run_with_project(State, Options, Suite, TestCase, Config,
                  Root, ProjectName, Checkouts) ->
     Images = rebar3_docker_ci_config:get(target_images, Config),
     ResultsDir = rebar3_docker_ci_project:results_dir(Root),
-    maybe
-        {ok, ResolvedTargets} ?= rebar3_docker_ci_targets:resolve(Images),
-        {ok, Targets} ?= rebar3_docker_ci_targets:select(
-                           ResolvedTargets, maps:get(otp, Options, undefined)),
-        ok ?= ensure_results_dir(ResultsDir),
-        {ok, PrivDir} ?= rebar3_docker_ci_project:priv_dir(),
-        Context = #{project_root => Root,
-                    scripts_dir => PrivDir,
-                    project_name => ProjectName,
-                    results_dir => ResultsDir,
-                    test_suite => Suite,
-                    test_case => TestCase,
-                    run_xref => effective_xref(Options, Config),
-                    run_dialyzer => effective_dialyzer(Options, Config),
-                    use_checkouts => Checkouts =/= [],
-                    test_framework =>
-                        rebar3_docker_ci_config:get(test_framework, Config),
-                    output_lang => output_language(Config),
-                    checkouts => Checkouts},
-        Result = rebar3_docker_ci_docker:run_matrix(
-                   Targets,
-                   fun(Target) ->
-                           rebar_api:info("Running Docker CI on OTP ~s [~s]",
-                                          [maps:get(otp, Target),
-                                           maps:get(image, Target)]),
-                           rebar3_docker_ci_docker:execute(
-                             rebar3_docker_ci_docker:run_args(Context, Target))
-                   end),
-        ok ?= report_run(ProjectName, Targets, ResultsDir, Result),
-        finish_run(State, Options, ProjectName, Targets,
-                   ResultsDir, Config, Result)
-    else
+    case rebar3_docker_ci_targets:resolve(Images) of
+        {ok, ResolvedTargets} ->
+            case rebar3_docker_ci_targets:select(
+                   ResolvedTargets, maps:get(otp, Options, undefined)) of
+                {ok, Targets} ->
+                    run_targets(State, Options, Suite, TestCase, Config,
+                                Root, ProjectName, ResultsDir, Targets, Checkouts);
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
+        {error, Reason} -> {error, {?MODULE, Reason}}
+    end.
+
+run_targets(State, Options, Suite, TestCase, Config,
+            Root, ProjectName, ResultsDir, Targets, Checkouts) ->
+    case ensure_results_dir(ResultsDir) of
+        ok ->
+            case rebar3_docker_ci_project:priv_dir() of
+                {ok, PrivDir} ->
+                    Context = #{project_root => Root,
+                                scripts_dir => PrivDir,
+                                project_name => ProjectName,
+                                results_dir => ResultsDir,
+                                test_suite => Suite,
+                                test_case => TestCase,
+                                run_xref => effective_xref(Options, Config),
+                                run_dialyzer => effective_dialyzer(Options, Config),
+                                run_ct =>
+                                    rebar3_docker_ci_config:get(run_ct, Config),
+                                run_eunit =>
+                                    rebar3_docker_ci_config:get(run_eunit, Config),
+                                use_checkouts => Checkouts =/= [],
+                                output_lang => output_language(Config),
+                                checkouts => Checkouts},
+                    Result = rebar3_docker_ci_docker:run_matrix(
+                               Targets,
+                               fun(Target) ->
+                                       rebar_api:info(
+                                         "Running Docker CI on OTP ~s [~s]",
+                                         [maps:get(otp, Target),
+                                          maps:get(image, Target)]),
+                                       rebar3_docker_ci_docker:execute(
+                                         rebar3_docker_ci_docker:run_args(
+                                           Context, Target))
+                               end),
+                    case report_run(ProjectName, Targets, ResultsDir, Result) of
+                        ok ->
+                            finish_run(State, Options, ProjectName, Targets,
+                                       ResultsDir, Config, Result);
+                        {error, Reason} -> {error, {?MODULE, Reason}}
+                    end;
+                {error, Reason} -> {error, {?MODULE, Reason}}
+            end;
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 

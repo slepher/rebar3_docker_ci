@@ -24,7 +24,7 @@ checkout_modes_test() ->
         ?assertEqual({ok, []},
                      rebar3_docker_ci_project:resolve_checkouts(Root, false))
     after
-        ok = file:del_dir_r(Root)
+        rebar3_docker_ci_test_utils:del_dir_r(Root)
     end.
 
 temp_dir(Name) ->

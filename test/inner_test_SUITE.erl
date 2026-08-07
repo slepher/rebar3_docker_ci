@@ -2,13 +2,13 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([suite_and_case/1, failed_check_stops_later_checks/1,
-         ct_failures_reported/1, eunit_framework/1]).
+         ct_failures_reported/1, eunit_framework/1, both_frameworks/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
     [suite_and_case, failed_check_stops_later_checks, ct_failures_reported,
-     eunit_framework].
+     eunit_framework, both_frameworks].
 
 init_per_testcase(Name, Config) ->
     Base = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
@@ -30,7 +30,7 @@ init_per_testcase(Name, Config) ->
      {work, Work}, {calls, filename:join(Base, "calls.txt")} | Config].
 
 end_per_testcase(_Name, Config) ->
-    file:del_dir_r(?config(base, Config)).
+    rebar3_docker_ci_test_utils:del_dir_r(?config(base, Config)).
 
 suite_and_case(Config) ->
     Environment = base_environment(Config) ++
@@ -92,19 +92,36 @@ ct_failures_reported(Config) ->
     ok.
 
 eunit_framework(Config) ->
-    Environment = base_environment(Config) ++ [{"TEST_FRAMEWORK", "eunit"}],
+    Environment = base_environment(Config) ++
+        [{"RUN_CT", "false"}, {"RUN_EUNIT", "true"}],
     {0, _Output} = run_script(Config, Environment),
     Calls = read_file(?config(calls, Config)),
     true = contains(Calls, "eunit\n"),
     false = contains(Calls, "ct\n"),
     ResultsDir = ?config(logs, Config),
     Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
-    true = contains(Summary, "test_framework=eunit"),
+    true = contains(Summary, "run_ct=false"),
+    true = contains(Summary, "run_eunit=true"),
+    true = contains(Summary, "common_test=skipped"),
     true = contains(Summary, "eunit=0"),
     true = contains(Summary, "result=0"),
-    false = contains(Summary, "common_test"),
     true = filelib:is_file(filename:join([ResultsDir, "29", "eunit.log"])),
     false = filelib:is_file(filename:join([ResultsDir, "29", "failures.txt"])),
+    ok.
+
+both_frameworks(Config) ->
+    Environment = base_environment(Config) ++ [{"RUN_EUNIT", "true"}],
+    {0, _Output} = run_script(Config, Environment),
+    Calls = read_file(?config(calls, Config)),
+    true = contains(Calls, "ct\n"),
+    true = contains(Calls, "eunit\n"),
+    ResultsDir = ?config(logs, Config),
+    Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
+    true = contains(Summary, "common_test=0"),
+    true = contains(Summary, "eunit=0"),
+    true = contains(Summary, "result=0"),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "common_test.log"])),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "eunit.log"])),
     ok.
 
 base_environment(Config) ->
@@ -117,6 +134,8 @@ base_environment(Config) ->
      {"ERLANG_VER", "29"},
      {"RUN_XREF", "true"},
      {"RUN_DIALYZER", "false"},
+     {"RUN_CT", "true"},
+     {"RUN_EUNIT", "false"},
      {"USE_CHECKOUTS", "false"},
      {"OUTPUT_LANG", "en"},
      {"CALL_LOG", ?config(calls, Config)}].
@@ -188,7 +207,7 @@ fake_rebar_script() ->
       "fi\n">>.
 
 ensure_clean_dir(Path) ->
-    _ = file:del_dir_r(Path),
+    _ = rebar3_docker_ci_test_utils:del_dir_r(Path),
     filelib:ensure_dir(filename:join(Path, "placeholder")).
 
 write_file(Path, Data) ->

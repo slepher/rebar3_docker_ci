@@ -49,5 +49,5 @@ example() ->
     "    {docker_images, [\"erlang:27\", \"erlang:28\"]}\n"
     "]}.\n\n"
     "Optional fields and defaults:\n"
-    "  run_xref=true, run_dialyzer=false, use_checkouts=auto,\n"
-    "  output_lang=auto, test_framework=common_test, log_port=8081".
+    "  run_xref=true, run_dialyzer=false, run_ct=true, run_eunit=false,\n"
+    "  use_checkouts=auto, output_lang=auto, log_port=8081".

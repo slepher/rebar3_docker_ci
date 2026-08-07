@@ -1,15 +1,9 @@
 -module(rebar3_docker_ci).
 
--moduledoc """
-Docker-backed CI providers for Rebar3 projects.
+-moduledoc "Docker-backed CI providers for Rebar3 projects.
 
 The plugin runs on the developer host. Target projects are compiled and tested
-inside independently versioned Erlang/OTP containers.
-""".
-
--if(?OTP_RELEASE < 27).
--error("rebar3_docker_ci requires Erlang/OTP 27 or newer").
--endif.
+inside independently versioned Erlang/OTP containers.".
 
 -export([init/1, provider_modules/0, format_error/1]).
 
@@ -44,9 +38,9 @@ format_error({unknown_config, Key}) ->
     io_lib:format("unknown docker_ci configuration option: ~p", [Key]);
 format_error(case_requires_suite) ->
     "--case requires --suite";
-format_error({selection_requires_common_test, Framework}) ->
-    io_lib:format("--suite/--case require test_framework common_test, "
-                  "but it is ~p", [Framework]);
+format_error({selection_requires_ct, Suite}) ->
+    io_lib:format("--suite/--case require run_ct=true, but it is disabled "
+                  "(suite ~s)", [Suite]);
 format_error(docker_not_found) ->
     "Docker was not found in PATH";
 format_error(plugin_priv_not_found) ->

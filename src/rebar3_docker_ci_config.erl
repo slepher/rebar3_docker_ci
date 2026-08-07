@@ -5,21 +5,24 @@
 -define(DEFAULTS,
         #{run_xref => true,
           run_dialyzer => false,
+          run_ct => true,
+          run_eunit => false,
           use_checkouts => auto,
           output_lang => auto,
-          test_framework => common_test,
           log_port => 8081}).
 
 load(State) ->
     from_list(rebar_state:get(State, docker_ci, [])).
 
 from_list(Options) when is_list(Options) ->
-    maybe
-        ok ?= validate_keys(Options),
-        OptionMap = maps:from_list(Options),
-        {ok, Targets} ?= normalize_targets(OptionMap),
-        normalize(maps:to_list(?DEFAULTS), OptionMap, Targets)
-    else
+    case validate_keys(Options) of
+        ok ->
+            OptionMap = maps:from_list(Options),
+            case normalize_targets(OptionMap) of
+                {ok, Targets} ->
+                    normalize(maps:to_list(?DEFAULTS), OptionMap, Targets);
+                {error, _Reason} = Error -> Error
+            end;
         {error, _Reason} = Error -> Error
     end;
 from_list(Value) ->
@@ -89,17 +92,14 @@ normalize_value(docker_images, Images) when is_list(Images), Images =/= [] ->
     normalize_images(Images, []);
 normalize_value(run_xref, Value) -> normalize_boolean(Value);
 normalize_value(run_dialyzer, Value) -> normalize_boolean(Value);
+normalize_value(run_ct, Value) -> normalize_boolean(Value);
+normalize_value(run_eunit, Value) -> normalize_boolean(Value);
 normalize_value(use_checkouts, Value)
   when Value =:= auto; Value =:= true; Value =:= false ->
     {ok, Value};
 normalize_value(output_lang, Value)
   when Value =:= auto; Value =:= en; Value =:= cn ->
     {ok, Value};
-normalize_value(test_framework, Value)
-  when Value =:= common_test; Value =:= eunit ->
-    {ok, Value};
-normalize_value(test_framework, ct) ->
-    {ok, common_test};
 normalize_value(log_port, Value) when is_integer(Value), Value > 0, Value < 65536 ->
     {ok, Value};
 normalize_value(_Key, _Value) -> error.

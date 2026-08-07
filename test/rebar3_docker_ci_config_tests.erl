@@ -12,16 +12,18 @@ defaults_test() ->
     ?assertEqual(false, value(run_dialyzer, Config)),
     ?assertEqual(auto, value(use_checkouts, Config)),
     ?assertEqual(auto, value(output_lang, Config)),
-    ?assertEqual(common_test, value(test_framework, Config)),
+    ?assertEqual(true, value(run_ct, Config)),
+    ?assertEqual(false, value(run_eunit, Config)),
     ?assertEqual(8081, value(log_port, Config)).
 
 overrides_test() ->
     Input = [{docker_images, ["erlang:21", <<"example/erlang-ci:27">>]},
              {run_xref, false},
              {run_dialyzer, true},
+             {run_ct, false},
+             {run_eunit, true},
              {use_checkouts, true},
              {output_lang, cn},
-             {test_framework, eunit},
              {log_port, 9090}],
     {ok, Config} = rebar3_docker_ci_config:from_list(Input),
     ?assertEqual(docker_images, value(target_source, Config)),
@@ -29,9 +31,10 @@ overrides_test() ->
                  value(target_images, Config)),
     ?assertEqual(false, value(run_xref, Config)),
     ?assertEqual(true, value(run_dialyzer, Config)),
+    ?assertEqual(false, value(run_ct, Config)),
+    ?assertEqual(true, value(run_eunit, Config)),
     ?assertEqual(true, value(use_checkouts, Config)),
     ?assertEqual(cn, value(output_lang, Config)),
-    ?assertEqual(eunit, value(test_framework, Config)),
     ?assertEqual(9090, value(log_port, Config)).
 
 required_targets_test_() ->
@@ -84,10 +87,10 @@ invalid_values_test_() ->
                                      rebar3_docker_ci_config:from_list(
                                        [{erlang_versions, ["27"]},
                                         {output_lang, fr}]))},
-     {"bad framework", ?_assertMatch({error, {invalid_config, test_framework, _}},
-                                      rebar3_docker_ci_config:from_list(
-                                        [{erlang_versions, ["27"]},
-                                         {test_framework, rebar}]))},
+     {"bad run_ct", ?_assertMatch({error, {invalid_config, run_ct, _}},
+                                   rebar3_docker_ci_config:from_list(
+                                     [{erlang_versions, ["27"]},
+                                      {run_ct, sometimes}]))},
      {"bad port", ?_assertMatch({error, {invalid_config, log_port, _}},
                                  rebar3_docker_ci_config:from_list(
                                    [{erlang_versions, ["27"]},

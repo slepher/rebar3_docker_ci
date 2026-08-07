@@ -17,8 +17,8 @@ rebar3 docker_ci logs
 
 The plugin host and the project under test have independent OTP requirements:
 
-- Release `0.3.0` runs the plugin on Erlang/OTP 27 or newer.
-- Tag `otp-19-0.3.0` preserves a host plugin compatible with OTP 19.
+- Release `0.3.1` runs the plugin on Erlang/OTP 21 or newer.
+- Tag `otp-19-0.3.1` preserves a host plugin compatible with OTP 19.
 - Test targets may use older or newer OTP releases provided by Docker images.
 
 Install the plugin globally on the developer machine. Do not list it in the
@@ -27,12 +27,12 @@ container and would couple the target OTP to the host plugin requirement.
 
 ## Requirements
 
-- Erlang/OTP 27 or newer on the developer machine
+- Erlang/OTP 21 or newer on the developer machine
 - A compatible Rebar3 installation
 - Docker Desktop or Docker Engine available in `PATH`
 - Git when the project is a Git worktree
 
-Use `otp-19-0.3.0` when the developer machine itself must run OTP 19.
+Use `otp-19-0.3.1` when the developer machine itself must run OTP 19.
 
 ## Installation
 
@@ -42,7 +42,7 @@ Add the plugin to `~/.config/rebar3/rebar.config`:
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.0"}}}
+      {tag, "0.3.1"}}}
 ]}.
 ```
 
@@ -69,7 +69,8 @@ Exactly one target source is required. For official Erlang Docker Hub images:
     {run_dialyzer, false},
     {use_checkouts, auto},
     {output_lang, auto},
-    {test_framework, common_test},
+    {run_ct, true},
+    {run_eunit, false},
     {log_port, 8081}
 ]}.
 ```
@@ -98,12 +99,12 @@ validation result, and normalized image names.
 | `run_dialyzer` | `false` | Run `rebar3 dialyzer` before Common Test. |
 | `use_checkouts` | `auto` | Include `_checkouts`: `auto`, `true`, or `false`. |
 | `output_lang` | `auto` | Runner output language: `auto`, `en`, or `cn`. |
-| `test_framework` | `common_test` | Test runner: `common_test` (or `ct`) or `eunit`. |
+| `run_ct` | `true` | Run `rebar3 ct`. |
+| `run_eunit` | `false` | Run `rebar3 eunit`; independent of `run_ct`, both may run. |
 | `log_port` | `8081` | Host port used by the log viewer. |
 
 Common Test suite and case selection are command-line-only. `--suite` may be
-used alone; `--case` requires `--suite`. Both require
-`test_framework=common_test`.
+used alone; `--case` requires `--suite`. Both require `run_ct=true`.
 
 ## Pull images
 
@@ -146,7 +147,8 @@ Run overrides:
 - `--view` starts the Nginx viewer after the checks; the default is to return.
 
 For each target the runner executes compile, optional xref, optional Dialyzer,
-and the configured test framework (`common_test` or `eunit`) in that order. A
+and the enabled test frameworks (`run_ct`, `run_eunit`; independent of each
+other) in that order. A
 failed step skips later steps for that target, while the remaining matrix
 continues. Each run writes a main results file and per-target artifacts under
 `_build/docker_ci/results/` (see below).

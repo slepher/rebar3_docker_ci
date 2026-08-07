@@ -2,7 +2,8 @@
 
 -export([content/4]).
 
--define(CHECKS, [compile, xref, dialyzer]).
+-define(CHECKS, [compile, xref, dialyzer, common_test, eunit]).
+-define(STATIC_CHECKS, [compile, xref, dialyzer]).
 -define(MAX_ERROR_LINES, 8).
 
 content(ProjectName, Targets, Result, ResultsDir) ->
@@ -57,7 +58,7 @@ check_lines(Summary) ->
      || {Check, Status} <- check_statuses(Summary)].
 
 failed_detail_lines(OtpDir, FailedCheck) ->
-    ErrorLines = case lists:member(FailedCheck, ?CHECKS) of
+    ErrorLines = case lists:member(FailedCheck, ?STATIC_CHECKS) of
                      true -> error_block_lines(OtpDir, FailedCheck);
                      false -> []
                  end,
@@ -86,14 +87,7 @@ links([{Label, Path} | Rest], Acc) ->
     end.
 
 check_statuses(Summary) ->
-    Checks = ?CHECKS ++ [test_check(Summary)],
-    [{Check, check_status(Summary, Check)} || Check <- Checks].
-
-test_check(Summary) ->
-    case maps:is_key("eunit", Summary) of
-        true -> eunit;
-        false -> common_test
-    end.
+    [{Check, check_status(Summary, Check)} || Check <- ?CHECKS].
 
 check_status(Summary, Check) ->
     case maps:get(atom_to_list(Check), Summary, "skipped") of
@@ -107,8 +101,7 @@ status_text(skipped) -> "skipped";
 status_text(failed) -> "failed".
 
 failed_check(Summary) ->
-    Checks = ?CHECKS ++ [test_check(Summary)],
-    case [Check || Check <- Checks,
+    case [Check || Check <- ?CHECKS,
                    check_status(Summary, Check) =:= failed] of
         [Check | _] -> Check;
         [] -> undefined

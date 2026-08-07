@@ -12,7 +12,7 @@ all() ->
 
 init_per_testcase(Name, Config) ->
     Base = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
-    _ = file:del_dir_r(Base),
+    _ = rebar3_docker_ci_test_utils:del_dir_r(Base),
     ok = filelib:ensure_dir(filename:join(Base, "placeholder")),
     Results = filename:join(Base, "results"),
     OtpDir = filename:join(Results, "28"),
@@ -34,7 +34,7 @@ init_per_testcase(Name, Config) ->
     [{results, Results}, {otp_dir, OtpDir} | Config].
 
 end_per_testcase(_Name, Config) ->
-    file:del_dir_r(?config(priv_dir, Config)).
+    rebar3_docker_ci_test_utils:del_dir_r(?config(priv_dir, Config)).
 
 all_passed(Config) ->
     Targets = [#{image => "erlang:27", otp => "27"}],
@@ -117,8 +117,8 @@ eunit_failure_reported(Config) ->
     Text = report_text("sample", Targets, Result, Config),
     true = contains(Text, "FAILED (eunit)\n"),
     true = contains(Text, "    compile:      ok\n"),
+    true = contains(Text, "    common_test:  skipped\n"),
     true = contains(Text, "    eunit:        failed\n"),
-    false = contains(Text, "common_test"),
     Results = ?config(results, Config),
     true = contains(Text, "    EUnit log:    " ++ filename:join(
                             Results, "28/eunit.log") ++ "\n"),

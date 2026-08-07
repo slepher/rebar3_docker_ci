@@ -12,8 +12,9 @@ TEST_SUITE="${TEST_SUITE:-}"
 TEST_CASE="${TEST_CASE:-}"
 RUN_XREF="${RUN_XREF:-true}"
 RUN_DIALYZER="${RUN_DIALYZER:-false}"
+RUN_CT="${RUN_CT:-true}"
+RUN_EUNIT="${RUN_EUNIT:-false}"
 USE_CHECKOUTS="${USE_CHECKOUTS:-auto}"
-TEST_FRAMEWORK="${TEST_FRAMEWORK:-common_test}"
 OUTPUT_LANG="${OUTPUT_LANG:-en}"
 
 VER_RESULTS="$RESULTS_DIR/$ERLANG_VER"
@@ -96,25 +97,25 @@ extract_failures() {
                     case_name = line
                 }
             }
-            /^=case[[:space:]]/ {
+            /^=case[ \t]/ {
                 flush_failure()
                 line = $0
-                sub(/^=case[[:space:]]+/, "", line)
+                sub(/^=case[ \t]+/, "", line)
                 update_case(line)
             }
-            /^=logfile[[:space:]]/ {
+            /^=logfile[ \t]/ {
                 logfile = $0
-                sub(/^=logfile[[:space:]]+/, "", logfile)
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", logfile)
+                sub(/^=logfile[ \t]+/, "", logfile)
+                gsub(/^[ \t]+|[ \t]+$/, "", logfile)
             }
             /^=result/ {
                 flush_failure()
                 line = $0
-                sub(/^=result[[:space:]]+failed:[[:space:]]*/, "", line)
+                sub(/^=result[ \t]+failed:[ \t]*/, "", line)
                 if (line != $0) {
                     in_failure = 1
                     reason = line
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", reason)
+                    gsub(/^[ \t]+|[ \t]+$/, "", reason)
                     if (reason ~ /^\{\{/) { reason = substr(reason, 2) }
                     gsub(/,$/, "", reason)
                     module = ""
@@ -190,7 +191,8 @@ copy_worktree() {
 
 echo "Project:         $PROJECT_NAME"
 echo "Erlang/OTP:      $ERLANG_VER"
-echo "Test framework:  $TEST_FRAMEWORK"
+echo "Run ct:          $RUN_CT"
+echo "Run eunit:       $RUN_EUNIT"
 echo "Common Test:     ${TEST_SUITE:-ALL}${TEST_CASE:+:$TEST_CASE}"
 echo "Run xref:        $RUN_XREF"
 echo "Run Dialyzer:    $RUN_DIALYZER"
@@ -235,7 +237,8 @@ project=$PROJECT_NAME
 erlang_otp=$ERLANG_VER
 test_suite=${TEST_SUITE:-ALL}
 test_case=${TEST_CASE:-ALL}
-test_framework=$TEST_FRAMEWORK
+run_ct=$RUN_CT
+run_eunit=$RUN_EUNIT
 use_checkouts=$USE_CHECKOUTS
 checkouts=${CHECKOUT_NAMES[*]:-none}
 EOF
@@ -262,31 +265,33 @@ else
 fi
 
 if [[ $CI_EXIT_CODE -eq 0 ]]; then
-    case "$TEST_FRAMEWORK" in
-        eunit)
-            step "$MSG_TEST"
-            run_check eunit rebar3 eunit || CI_EXIT_CODE=$?
-            ;;
-        *)
-            CT_COMMAND=(rebar3 ct)
-            if [[ -n "$TEST_SUITE" ]]; then
-                CT_COMMAND+=(--suite "$TEST_SUITE")
-            fi
-            if [[ -n "$TEST_CASE" ]]; then
-                CT_COMMAND+=(--case "$TEST_CASE")
-            fi
+    if bool_enabled "$RUN_CT"; then
+        CT_COMMAND=(rebar3 ct)
+        if [[ -n "$TEST_SUITE" ]]; then
+            CT_COMMAND+=(--suite "$TEST_SUITE")
+        fi
+        if [[ -n "$TEST_CASE" ]]; then
+            CT_COMMAND+=(--case "$TEST_CASE")
+        fi
 
-            step "$MSG_TEST"
-            run_check common_test "${CT_COMMAND[@]}" || CI_EXIT_CODE=$?
-            ;;
-    esac
+        step "$MSG_TEST"
+        run_check common_test "${CT_COMMAND[@]}" || CI_EXIT_CODE=$?
+    else
+        printf 'common_test=skipped\n' >> "$SUMMARY_FILE"
+    fi
+
+    if bool_enabled "$RUN_EUNIT"; then
+        step "$MSG_TEST"
+        run_check eunit rebar3 eunit || CI_EXIT_CODE=$?
+    else
+        printf 'eunit=skipped\n' >> "$SUMMARY_FILE"
+    fi
 else
-    TEST_KEY="common_test"
-    [[ "$TEST_FRAMEWORK" == "eunit" ]] && TEST_KEY="eunit"
-    printf '%s=skipped\n' "$TEST_KEY" >> "$SUMMARY_FILE"
+    printf 'common_test=skipped\n' >> "$SUMMARY_FILE"
+    printf 'eunit=skipped\n' >> "$SUMMARY_FILE"
 fi
 
-if [[ "$TEST_FRAMEWORK" != "eunit" ]]; then
+if bool_enabled "$RUN_CT"; then
     extract_failures "$VER_RESULTS/failures.txt" "$PREV_LOG_RUN_DIR"
 fi
 

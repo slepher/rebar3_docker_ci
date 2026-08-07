@@ -40,7 +40,8 @@ run_args(Context, Target) ->
         env("RUN_XREF", bool_string(maps:get(run_xref, Context))) ++
         env("RUN_DIALYZER", bool_string(maps:get(run_dialyzer, Context))) ++
         env("USE_CHECKOUTS", bool_string(maps:get(use_checkouts, Context))) ++
-        env("TEST_FRAMEWORK", atom_to_list(maps:get(test_framework, Context))) ++
+        env("RUN_CT", bool_string(maps:get(run_ct, Context))) ++
+        env("RUN_EUNIT", bool_string(maps:get(run_eunit, Context))) ++
         env("OUTPUT_LANG", atom_to_list(maps:get(output_lang, Context))) ++
         ["--volume", ProjectRoot ++ ":/mnt/source:ro",
          "--volume", ScriptsDir ++ ":/mnt/scripts:ro",

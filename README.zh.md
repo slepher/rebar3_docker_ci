@@ -17,8 +17,8 @@ rebar3 docker_ci logs
 
 插件宿主版本和被测项目版本彼此独立：
 
-- `0.3.0` 要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
-- `otp-19-0.3.0` 保留可在 OTP 19 开发机上运行的插件版本。
+- `0.3.1` 要求开发机使用 Erlang/OTP 21 或更高版本运行插件。
+- `otp-19-0.3.1` 保留可在 OTP 19 开发机上运行的插件版本。
 - 测试目标可以使用 Docker 镜像提供的更旧或更新 OTP 版本。
 
 插件必须安装在开发机的 Rebar3 全局配置中，不能加入被测项目的
@@ -27,12 +27,12 @@ rebar3 docker_ci logs
 
 ## 环境要求
 
-- 开发机 Erlang/OTP 27 或更高版本
+- 开发机 Erlang/OTP 21 或更高版本
 - 与其兼容的 Rebar3
 - `PATH` 中可用的 Docker Desktop 或 Docker Engine
 - 项目使用 Git 工作树时需要 Git
 
-开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.3.0`。
+开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.3.1`。
 
 ## 安装
 
@@ -42,7 +42,7 @@ rebar3 docker_ci logs
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.0"}}}
+      {tag, "0.3.1"}}}
 ]}.
 ```
 
@@ -69,7 +69,8 @@ rebar3 help docker_ci logs
     {run_dialyzer, false},
     {use_checkouts, auto},
     {output_lang, auto},
-    {test_framework, common_test},
+    {run_ct, true},
+    {run_eunit, false},
     {log_port, 8081}
 ]}.
 ```
@@ -97,11 +98,12 @@ rebar3 help docker_ci logs
 | `run_dialyzer` | `false` | Common Test 前运行 `rebar3 dialyzer`。 |
 | `use_checkouts` | `auto` | 是否包含 `_checkouts`：`auto`、`true` 或 `false`。 |
 | `output_lang` | `auto` | runner 输出语言：`auto`、`en` 或 `cn`。 |
-| `test_framework` | `common_test` | 测试框架：`common_test`(或 `ct`)或 `eunit`。 |
+| `run_ct` | `true` | 运行 `rebar3 ct`。 |
+| `run_eunit` | `false` | 运行 `rebar3 eunit`；与 `run_ct` 相互独立，可同时启用。 |
 | `log_port` | `8081` | 日志查看器使用的宿主端口。 |
 
 Common Test 的 suite 和 case 只通过命令行传入。`--suite` 可以单独使用，
-`--case` 必须和 `--suite` 一起使用；两者都要求 `test_framework=common_test`。
+`--case` 必须和 `--suite` 一起使用；两者都要求 `run_ct=true`。
 
 ## 拉取镜像
 
@@ -142,8 +144,8 @@ rebar3 docker_ci run --view
 - `--no-checkouts`：忽略项目的 `_checkouts`。
 - `--view`：检查结束后启动 Nginx 查看器；默认直接返回。
 
-每个目标依次执行 compile、可选 xref、可选 Dialyzer 和配置的测试框架
-(`common_test` 或 `eunit`)。某一步失败后，该目标跳过后续步骤，但矩阵中的
+每个目标依次执行 compile、可选 xref、可选 Dialyzer 和启用的测试框架
+(`run_ct`、`run_eunit`,相互独立)。某一步失败后，该目标跳过后续步骤，但矩阵中的
 其他目标继续运行。每次运行都会把主结果文件和各目标的产物写入
 `_build/docker_ci/results/`(见下文)。
 
