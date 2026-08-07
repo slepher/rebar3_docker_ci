@@ -47,7 +47,7 @@ Global installation (required when target images use OTP older than 21):
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.1"}}}
+      {tag, "0.3.2"}}}
 ]}.
 ```
 
@@ -57,7 +57,7 @@ Project installation (sufficient when every target image is OTP 21 or newer):
 {project_plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.1"}}}
+      {tag, "0.3.2"}}}
 ]}.
 ```
 

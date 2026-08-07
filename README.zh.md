@@ -45,7 +45,7 @@ rebar3 docker_ci logs
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.1"}}}
+      {tag, "0.3.2"}}}
 ]}.
 ```
 
@@ -55,7 +55,7 @@ rebar3 docker_ci logs
 {project_plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.3.1"}}}
+      {tag, "0.3.2"}}}
 ]}.
 ```
 
