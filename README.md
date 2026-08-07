@@ -241,6 +241,7 @@ for CI implementation files.
 rebar3 do compile, eunit, ct
 ```
 
-The plugin is integration-tested against Astranaut on OTP 21, 23, 28, and 29,
-including xref, Common Test, suite/case selection, log export, and coverage.
-The plugin also self-tests on every OTP from 21 through 29.
+The plugin supports any Erlang/OTP 21 or newer test target and self-tests on
+every OTP release from 21 through 29: each official Erlang image compiles the
+plugin and runs xref and the full Common Test suite inside the container.
+There is no runtime dependency on any specific consumer project.

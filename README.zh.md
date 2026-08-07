@@ -229,6 +229,6 @@ Nginx 从结果目录提供以下路径：
 rebar3 do compile, eunit, ct
 ```
 
-插件使用 Astranaut 在 OTP 21、23、28、29 上执行真实集成测试，包括 xref、
-Common Test、suite/case 选择、日志导出和覆盖率导出。插件自身也会在
-OTP 21 到 29 的全部版本上自检。
+插件支持任意 OTP 21 及以上的测试目标,并在 OTP 21 到 29 的每个版本上自检:
+每个官方 Erlang 镜像都会在容器内编译插件,并运行 xref 与完整 Common Test
+套件。插件对任何具体消费项目都没有运行时依赖。
