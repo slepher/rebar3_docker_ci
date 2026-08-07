@@ -50,4 +50,4 @@ example() ->
     "]}.\n\n"
     "Optional fields and defaults:\n"
     "  run_xref=true, run_dialyzer=false, use_checkouts=auto,\n"
-    "  output_lang=auto, log_port=8081, log_volume=auto".
+    "  output_lang=auto, test_framework=common_test, log_port=8081".

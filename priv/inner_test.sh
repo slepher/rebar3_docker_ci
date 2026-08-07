@@ -2,7 +2,7 @@
 set -uo pipefail
 
 SRC_MOUNT="${SRC_MOUNT:-/mnt/source}"
-LOG_VOLUME="${LOG_VOLUME:-/mnt/logs}"
+RESULTS_DIR="${RESULTS_DIR:-/mnt/results}"
 PROJECT_NAME="${PROJECT_NAME:-project}"
 WORK_DIR="${WORK_DIR:-/tmp/build/$PROJECT_NAME}"
 
@@ -13,12 +13,11 @@ TEST_CASE="${TEST_CASE:-}"
 RUN_XREF="${RUN_XREF:-true}"
 RUN_DIALYZER="${RUN_DIALYZER:-false}"
 USE_CHECKOUTS="${USE_CHECKOUTS:-auto}"
+TEST_FRAMEWORK="${TEST_FRAMEWORK:-common_test}"
 OUTPUT_LANG="${OUTPUT_LANG:-en}"
 
-VOL_VER_BASE="$LOG_VOLUME/$ERLANG_VER"
-VOL_LOGS_DIR="$VOL_VER_BASE/logs"
-VOL_COVER_DIR="$VOL_VER_BASE/cover"
-SUMMARY_FILE="$VOL_VER_BASE/ci-summary.txt"
+VER_RESULTS="$RESULTS_DIR/$ERLANG_VER"
+SUMMARY_FILE="$VER_RESULTS/ci-summary.txt"
 
 if [[ "$OUTPUT_LANG" == "cn" ]]; then
     MSG_PREPARE="准备隔离工作目录"
@@ -48,14 +47,105 @@ run_check() {
     shift
 
     echo "CMD: $*"
-    "$@"
-    local status=$?
+    "$@" 2>&1 | tee "$VER_RESULTS/$name.log"
+    local status="${PIPESTATUS[0]}"
     printf '%s=%s\n' "$name" "$status" >> "$SUMMARY_FILE"
     return "$status"
 }
 
 bool_enabled() {
     [[ "${1,,}" == "true" || "$1" == "1" || "${1,,}" == "yes" ]]
+}
+
+extract_failures() {
+    local out_file="$1"
+    local prev_run_dir="$2"
+    local newest_run_dir block_count suite_log
+
+    rm -f "$out_file"
+    newest_run_dir=$(ls -dt _build/test/logs/ct_run.* 2>/dev/null | head -1)
+    if [[ -z "$newest_run_dir" || "$newest_run_dir" == "$prev_run_dir" ]]; then
+        return 0
+    fi
+
+    local temp_file="$out_file.blocks"
+    : > "$temp_file"
+    while IFS= read -r -d '' suite_log; do
+        awk '
+            function flush_failure(   i, seg, comma, lseg) {
+                if (in_failure) {
+                    printf "suite=%s\n", suite
+                    printf "case=%s\n", case_name
+                    printf "reason=%s", reason
+                    if (module != "") {
+                        printf " at %s:%s", module, frame_line
+                    }
+                    printf "\n"
+                    printf "logfile=%s\n", logfile
+                    printf "---\n"
+                    in_failure = 0
+                }
+            }
+            function update_case(line,   i) {
+                i = index(line, ":")
+                if (i > 0) {
+                    suite = substr(line, 1, i - 1)
+                    case_name = substr(line, i + 1)
+                } else {
+                    suite = line
+                    case_name = line
+                }
+            }
+            /^=case[[:space:]]/ {
+                flush_failure()
+                line = $0
+                sub(/^=case[[:space:]]+/, "", line)
+                update_case(line)
+            }
+            /^=logfile[[:space:]]/ {
+                logfile = $0
+                sub(/^=logfile[[:space:]]+/, "", logfile)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", logfile)
+            }
+            /^=result/ {
+                flush_failure()
+                line = $0
+                sub(/^=result[[:space:]]+failed:[[:space:]]*/, "", line)
+                if (line != $0) {
+                    in_failure = 1
+                    reason = line
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", reason)
+                    if (reason ~ /^\{\{/) { reason = substr(reason, 2) }
+                    gsub(/,$/, "", reason)
+                    module = ""
+                    frame_line = ""
+                }
+            }
+            in_failure && !/^=/ {
+                if (module == "" &&
+                    match($0, /\{[A-Za-z0-9_]+,[A-Za-z0-9_]+,[0-9]+,/)) {
+                    seg = substr($0, RSTART, RLENGTH)
+                    comma = index(seg, ",")
+                    module = substr(seg, 2, comma - 2)
+                }
+                if (frame_line == "" && match($0, /\{line,[0-9]+\}/)) {
+                    lseg = substr($0, RSTART, RLENGTH)
+                    gsub(/[^0-9]/, "", lseg)
+                    frame_line = lseg
+                }
+            }
+            END { flush_failure() }
+        ' "$suite_log" >> "$temp_file"
+    done < <(find "$newest_run_dir" -name suite.log -print0)
+
+    block_count=$(grep -c '^---$' "$temp_file" 2>/dev/null || true)
+    if [[ "$block_count" -gt 0 ]]; then
+        printf 'failure_count=%s\n' "$block_count" > "$out_file"
+        cat "$temp_file" >> "$out_file"
+    else
+        rm -f "$out_file"
+    fi
+    rm -f "$temp_file"
 }
 
 if [[ "${USE_CHECKOUTS,,}" == "auto" ]]; then
@@ -100,6 +190,7 @@ copy_worktree() {
 
 echo "Project:         $PROJECT_NAME"
 echo "Erlang/OTP:      $ERLANG_VER"
+echo "Test framework:  $TEST_FRAMEWORK"
 echo "Common Test:     ${TEST_SUITE:-ALL}${TEST_CASE:+:$TEST_CASE}"
 echo "Run xref:        $RUN_XREF"
 echo "Run Dialyzer:    $RUN_DIALYZER"
@@ -107,7 +198,7 @@ echo "Use _checkouts:  $USE_CHECKOUTS"
 
 step "$MSG_PREPARE"
 rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR" "$VOL_VER_BASE"
+mkdir -p "$WORK_DIR" "$VER_RESULTS"
 
 if ! copy_worktree "$SRC_MOUNT" "$WORK_DIR"; then
     echo "Error: failed to copy the project worktree." >&2
@@ -133,9 +224,9 @@ if bool_enabled "$USE_CHECKOUTS"; then
 fi
 
 mkdir -p "$WORK_DIR/_build/test/logs"
-if [[ -d "$VOL_LOGS_DIR" ]] &&
-   [[ -n "$(ls -A "$VOL_LOGS_DIR" 2>/dev/null)" ]]; then
-    cp -r "$VOL_LOGS_DIR"/. "$WORK_DIR/_build/test/logs/"
+if [[ -d "$VER_RESULTS/logs" ]] &&
+   [[ -n "$(ls -A "$VER_RESULTS/logs" 2>/dev/null)" ]]; then
+    cp -r "$VER_RESULTS/logs"/. "$WORK_DIR/_build/test/logs/"
 fi
 
 rm -f "$SUMMARY_FILE"
@@ -144,12 +235,14 @@ project=$PROJECT_NAME
 erlang_otp=$ERLANG_VER
 test_suite=${TEST_SUITE:-ALL}
 test_case=${TEST_CASE:-ALL}
+test_framework=$TEST_FRAMEWORK
 use_checkouts=$USE_CHECKOUTS
 checkouts=${CHECKOUT_NAMES[*]:-none}
 EOF
 
 cd "$WORK_DIR" || exit 1
 CI_EXIT_CODE=0
+PREV_LOG_RUN_DIR=$(ls -dt _build/test/logs/ct_run.* 2>/dev/null | head -1)
 
 step "$MSG_COMPILE"
 run_check compile rebar3 compile || CI_EXIT_CODE=$?
@@ -169,31 +262,45 @@ else
 fi
 
 if [[ $CI_EXIT_CODE -eq 0 ]]; then
-    CT_COMMAND=(rebar3 ct)
-    if [[ -n "$TEST_SUITE" ]]; then
-        CT_COMMAND+=(--suite "$TEST_SUITE")
-    fi
-    if [[ -n "$TEST_CASE" ]]; then
-        CT_COMMAND+=(--case "$TEST_CASE")
-    fi
+    case "$TEST_FRAMEWORK" in
+        eunit)
+            step "$MSG_TEST"
+            run_check eunit rebar3 eunit || CI_EXIT_CODE=$?
+            ;;
+        *)
+            CT_COMMAND=(rebar3 ct)
+            if [[ -n "$TEST_SUITE" ]]; then
+                CT_COMMAND+=(--suite "$TEST_SUITE")
+            fi
+            if [[ -n "$TEST_CASE" ]]; then
+                CT_COMMAND+=(--case "$TEST_CASE")
+            fi
 
-    step "$MSG_TEST"
-    run_check common_test "${CT_COMMAND[@]}" || CI_EXIT_CODE=$?
+            step "$MSG_TEST"
+            run_check common_test "${CT_COMMAND[@]}" || CI_EXIT_CODE=$?
+            ;;
+    esac
 else
-    printf 'common_test=skipped\n' >> "$SUMMARY_FILE"
+    TEST_KEY="common_test"
+    [[ "$TEST_FRAMEWORK" == "eunit" ]] && TEST_KEY="eunit"
+    printf '%s=skipped\n' "$TEST_KEY" >> "$SUMMARY_FILE"
+fi
+
+if [[ "$TEST_FRAMEWORK" != "eunit" ]]; then
+    extract_failures "$VER_RESULTS/failures.txt" "$PREV_LOG_RUN_DIR"
 fi
 
 step "$MSG_EXPORT"
-mkdir -p "$VOL_LOGS_DIR" "$VOL_COVER_DIR"
+mkdir -p "$VER_RESULTS/logs" "$VER_RESULTS/cover"
 
 if [[ -d "_build/test/logs" ]]; then
-    rm -rf "$VOL_LOGS_DIR"/*
-    cp -r _build/test/logs/. "$VOL_LOGS_DIR/"
+    rm -rf "$VER_RESULTS/logs"/*
+    cp -r _build/test/logs/. "$VER_RESULTS/logs/"
 fi
 
 if [[ -d "_build/test/cover" ]]; then
-    rm -rf "$VOL_COVER_DIR"/*
-    cp -r _build/test/cover/. "$VOL_COVER_DIR/"
+    rm -rf "$VER_RESULTS/cover"/*
+    cp -r _build/test/cover/. "$VER_RESULTS/cover/"
 fi
 
 printf 'result=%s\n' "$CI_EXIT_CODE" >> "$SUMMARY_FILE"

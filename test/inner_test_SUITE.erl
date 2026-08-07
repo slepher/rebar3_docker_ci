@@ -1,12 +1,14 @@
 -module(inner_test_SUITE).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([suite_and_case/1, failed_check_stops_later_checks/1]).
+-export([suite_and_case/1, failed_check_stops_later_checks/1,
+         ct_failures_reported/1, eunit_framework/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-    [suite_and_case, failed_check_stops_later_checks].
+    [suite_and_case, failed_check_stops_later_checks, ct_failures_reported,
+     eunit_framework].
 
 init_per_testcase(Name, Config) ->
     Base = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
@@ -42,12 +44,15 @@ suite_and_case(Config) ->
     true = contains(Calls, "xref\n"),
     true = contains(Calls,
                     "ct --suite astranaut_design_SUITE --case lib_form_source_contracts\n"),
-    Summary = read_file(filename:join([?config(logs, Config), "29", "ci-summary.txt"])),
+    ResultsDir = ?config(logs, Config),
+    Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
     true = contains(Summary, "project=fixture"),
     true = contains(Summary, "test_suite=astranaut_design_SUITE"),
     true = contains(Summary, "result=0"),
-    true = filelib:is_file(filename:join(
-                            [?config(logs, Config), "29", "logs", "index.html"])),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "logs", "index.html"])),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "compile.log"])),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "common_test.log"])),
+    false = filelib:is_file(filename:join([ResultsDir, "29", "failures.txt"])),
     ok.
 
 failed_check_stops_later_checks(Config) ->
@@ -59,17 +64,54 @@ failed_check_stops_later_checks(Config) ->
     true = contains(Calls, "compile\n"),
     true = contains(Calls, "xref\n"),
     false = contains(Calls, "ct"),
-    Summary = read_file(filename:join([?config(logs, Config), "29", "ci-summary.txt"])),
+    ResultsDir = ?config(logs, Config),
+    Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
     true = contains(Summary, "xref=9"),
     true = contains(Summary, "common_test=skipped"),
     true = contains(Summary, "result=9"),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "compile.log"])),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "xref.log"])),
+    false = filelib:is_file(filename:join([ResultsDir, "29", "failures.txt"])),
+    ok.
+
+ct_failures_reported(Config) ->
+    Environment = base_environment(Config) ++ [{"FAIL_CT", "1"}],
+    {1, _Output} = run_script(Config, Environment),
+    ResultsDir = ?config(logs, Config),
+    Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
+    true = contains(Summary, "common_test=1"),
+    true = contains(Summary, "result=1"),
+    Failures = read_file(filename:join([ResultsDir, "29", "failures.txt"])),
+    true = contains(Failures, "failure_count=1"),
+    true = contains(Failures, "suite=astranaut_design_SUITE"),
+    true = contains(Failures, "case=lib_form_source_contracts"),
+    true = contains(Failures, "reason={badmatch,false} at astranaut_design_SUITE:42"),
+    true = contains(Failures,
+                    "logfile=astranaut_design_suite.lib_form_source_contracts.html"),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "common_test.log"])),
+    ok.
+
+eunit_framework(Config) ->
+    Environment = base_environment(Config) ++ [{"TEST_FRAMEWORK", "eunit"}],
+    {0, _Output} = run_script(Config, Environment),
+    Calls = read_file(?config(calls, Config)),
+    true = contains(Calls, "eunit\n"),
+    false = contains(Calls, "ct\n"),
+    ResultsDir = ?config(logs, Config),
+    Summary = read_file(filename:join([ResultsDir, "29", "ci-summary.txt"])),
+    true = contains(Summary, "test_framework=eunit"),
+    true = contains(Summary, "eunit=0"),
+    true = contains(Summary, "result=0"),
+    false = contains(Summary, "common_test"),
+    true = filelib:is_file(filename:join([ResultsDir, "29", "eunit.log"])),
+    false = filelib:is_file(filename:join([ResultsDir, "29", "failures.txt"])),
     ok.
 
 base_environment(Config) ->
     ExistingPath = case os:getenv("PATH") of false -> ""; Path -> Path end,
     [{"PATH", ?config(bin, Config) ++ ":" ++ ExistingPath},
      {"SRC_MOUNT", ?config(source, Config)},
-     {"LOG_VOLUME", ?config(logs, Config)},
+     {"RESULTS_DIR", ?config(logs, Config)},
      {"WORK_DIR", ?config(work, Config)},
      {"PROJECT_NAME", "fixture"},
      {"ERLANG_VER", "29"},
@@ -119,6 +161,30 @@ fake_rebar_script() ->
       "  mkdir -p _build/test/logs _build/test/cover\n"
       "  printf logs > _build/test/logs/index.html\n"
       "  printf cover > _build/test/cover/index.html\n"
+      "  if [[ \"${FAIL_CT:-0}\" == \"1\" ]]; then\n"
+      "    RUN_DIR=_build/test/logs/ct_run.nonode@nohost.2026-08-07_22.39.22\n"
+      "    mkdir -p \"$RUN_DIR/lib.fixture.astranaut_design_SUITE.logs/run.2026-08-07_22.39.22\"\n"
+      "    cat > \"$RUN_DIR/lib.fixture.astranaut_design_SUITE.logs/run.2026-08-07_22.39.22/suite.log\" <<'EOF'\n"
+      "=case          ct_framework:init_per_suite\n"
+      "=result        ok\n"
+      "=case          astranaut_design_SUITE:lib_form_source_contracts\n"
+      "=logfile       astranaut_design_suite.lib_form_source_contracts.html\n"
+      "=started       2026-08-07 22:39:22\n"
+      "=result        failed: {{badmatch,false},\n"
+      "                        [{astranaut_design_SUITE,lib_form_source_contracts,1,\n"
+      "                              [{file,\n"
+      "                                   \"/x/test/astranaut_design_SUITE.erl\"},\n"
+      "                               {line,42}]},\n"
+      "                         {test_server,ts_tc,3,\n"
+      "                              [{file,\"test_server.erl\"},{line,1799}]}]}\n"
+      "=elapsed       0.041401s\n"
+      "=== *** FAILED test case 1 of 2 ***\n"
+      "=case          astranaut_design_SUITE:passing_case\n"
+      "=result        ok\n"
+      "=== TEST COMPLETE, 1 ok, 1 failed of 2 test cases\n"
+      "EOF\n"
+      "    exit 1\n"
+      "  fi\n"
       "fi\n">>.
 
 ensure_clean_dir(Path) ->

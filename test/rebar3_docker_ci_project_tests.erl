@@ -2,16 +2,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-safe_name_test_() ->
-    [{"binary", ?_assertEqual("my-app", rebar3_docker_ci_project:safe_name(<<"My_App">>))},
-     {"punctuation", ?_assertEqual("app-name", rebar3_docker_ci_project:safe_name(" App @ Name "))},
-     {"repeated separators", ?_assertEqual("one-two", rebar3_docker_ci_project:safe_name("one___two"))},
-     {"empty", ?_assertEqual("project", rebar3_docker_ci_project:safe_name("***"))}].
-
-volume_name_test() ->
-    ?assertEqual("rebar3-docker-ci-my-app",
-                 rebar3_docker_ci_project:volume_name(auto, "My_App")),
-    ?assertEqual("chosen", rebar3_docker_ci_project:volume_name("chosen", "ignored")).
+results_dir_test() ->
+    ?assertEqual("/project/_build/docker_ci/results",
+                 rebar3_docker_ci_project:results_dir("/project")),
+    ?assertEqual("/tmp/x/_build/docker_ci/results",
+                 rebar3_docker_ci_project:results_dir("/tmp/x")).
 
 checkout_modes_test() ->
     Root = temp_dir("checkout_modes"),

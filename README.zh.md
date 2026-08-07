@@ -17,8 +17,8 @@ rebar3 docker_ci logs
 
 插件宿主版本和被测项目版本彼此独立：
 
-- `0.2.0` 要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
-- `otp-19-0.2.0` 保留可在 OTP 19 开发机上运行的插件版本。
+- `0.3.0` 要求开发机使用 Erlang/OTP 27 或更高版本运行插件。
+- `otp-19-0.3.0` 保留可在 OTP 19 开发机上运行的插件版本。
 - 测试目标可以使用 Docker 镜像提供的更旧或更新 OTP 版本。
 
 插件必须安装在开发机的 Rebar3 全局配置中，不能加入被测项目的
@@ -32,7 +32,7 @@ rebar3 docker_ci logs
 - `PATH` 中可用的 Docker Desktop 或 Docker Engine
 - 项目使用 Git 工作树时需要 Git
 
-开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.2.0`。
+开发机本身必须使用 OTP 19 时，请安装 `otp-19-0.3.0`。
 
 ## 安装
 
@@ -42,7 +42,7 @@ rebar3 docker_ci logs
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.2.0"}}}
+      {tag, "0.3.0"}}}
 ]}.
 ```
 
@@ -69,8 +69,8 @@ rebar3 help docker_ci logs
     {run_dialyzer, false},
     {use_checkouts, auto},
     {output_lang, auto},
-    {log_port, 8081},
-    {log_volume, auto}
+    {test_framework, common_test},
+    {log_port, 8081}
 ]}.
 ```
 
@@ -97,11 +97,11 @@ rebar3 help docker_ci logs
 | `run_dialyzer` | `false` | Common Test 前运行 `rebar3 dialyzer`。 |
 | `use_checkouts` | `auto` | 是否包含 `_checkouts`：`auto`、`true` 或 `false`。 |
 | `output_lang` | `auto` | runner 输出语言：`auto`、`en` 或 `cn`。 |
+| `test_framework` | `common_test` | 测试框架：`common_test`(或 `ct`)或 `eunit`。 |
 | `log_port` | `8081` | 日志查看器使用的宿主端口。 |
-| `log_volume` | `auto` | Docker 日志卷；`auto` 按项目名称隔离。 |
 
 Common Test 的 suite 和 case 只通过命令行传入。`--suite` 可以单独使用，
-`--case` 必须和 `--suite` 一起使用。
+`--case` 必须和 `--suite` 一起使用；两者都要求 `test_framework=common_test`。
 
 ## 拉取镜像
 
@@ -120,16 +120,19 @@ OTP 版本。
 
 ```text
 # 运行完整矩阵，不启动日志查看器
-rebar3 docker_ci run --no-view
+rebar3 docker_ci run
 
 # 运行一个检测到的 OTP 版本
-rebar3 docker_ci run --otp 23 --no-view
+rebar3 docker_ci run --otp 23
 
 # 运行单个 Common Test suite
-rebar3 docker_ci run --otp 28 --suite sample_SUITE --no-view
+rebar3 docker_ci run --otp 28 --suite sample_SUITE
 
 # 运行 suite 中的单个 case
-rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case --no-view
+rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case
+
+# 检查结束后启动日志查看器
+rebar3 docker_ci run --view
 ```
 
 单次运行覆盖参数：
@@ -137,11 +140,29 @@ rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case --no-view
 - `--dialyzer`：本次运行启用 Dialyzer。
 - `--skip-xref`：本次运行关闭 xref。
 - `--no-checkouts`：忽略项目的 `_checkouts`。
-- `--no-view`：测试结束后直接返回，不启动 Nginx。
+- `--view`：检查结束后启动 Nginx 查看器；默认直接返回。
 
-每个目标依次执行 compile、可选 xref、可选 Dialyzer 和 Common Test。某一步
-失败后，该目标跳过后续步骤，但矩阵中的其他目标继续运行。最终汇总列出每个
-选中 OTP 版本及来源镜像，然后显示总结果；启用查看器时还会输出 HTTP 链接。
+每个目标依次执行 compile、可选 xref、可选 Dialyzer 和配置的测试框架
+(`common_test` 或 `eunit`)。某一步失败后，该目标跳过后续步骤，但矩阵中的
+其他目标继续运行。每次运行都会把主结果文件和各目标的产物写入
+`_build/docker_ci/results/`(见下文)。
+
+## 结果与失败信息
+
+所有结果都以纯文件写入宿主项目目录，无需 Docker 即可读取：
+
+```text
+_build/docker_ci/results/ci-results.txt          本次运行的主结果文件
+_build/docker_ci/results/<otp>/ci-summary.txt    各检查退出码
+_build/docker_ci/results/<otp>/failures.txt      失败的 suite、case 与原因
+_build/docker_ci/results/<otp>/compile.log       各检查完整输出(每项一个)
+_build/docker_ci/results/<otp>/logs/             Common Test 日志
+_build/docker_ci/results/<otp>/cover/            覆盖率报告
+```
+
+`ci-results.txt` 是唯一入口：通过的目标只占一行，失败的目标会显示失败的检查、
+失败的 suite 和 case 及其异常，以及指向失败日志的绝对路径链接。失败时
+stdout 会打印相同内容。退出码不变：目标失败即整个运行失败。
 
 ## 源码隔离与 checkout
 
@@ -164,7 +185,7 @@ rebar3 docker_ci logs
 rebar3 docker_ci logs --port 8082
 ```
 
-Nginx 从 Docker 日志卷提供以下路径：
+Nginx 从结果目录提供以下路径：
 
 ```text
 /<otp>/ci-summary.txt

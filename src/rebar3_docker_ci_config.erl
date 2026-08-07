@@ -7,8 +7,8 @@
           run_dialyzer => false,
           use_checkouts => auto,
           output_lang => auto,
-          log_port => 8081,
-          log_volume => auto}).
+          test_framework => common_test,
+          log_port => 8081}).
 
 load(State) ->
     from_list(rebar_state:get(State, docker_ci, [])).
@@ -32,6 +32,8 @@ validate_keys([]) ->
     ok;
 validate_keys([{image_name, _Value} | _Rest]) ->
     {error, {removed_config, image_name}};
+validate_keys([{log_volume, _Value} | _Rest]) ->
+    {error, {removed_config, log_volume}};
 validate_keys([{Key, _Value} | Rest]) ->
     case allowed_key(Key) of
         true -> validate_keys(Rest);
@@ -93,10 +95,13 @@ normalize_value(use_checkouts, Value)
 normalize_value(output_lang, Value)
   when Value =:= auto; Value =:= en; Value =:= cn ->
     {ok, Value};
+normalize_value(test_framework, Value)
+  when Value =:= common_test; Value =:= eunit ->
+    {ok, Value};
+normalize_value(test_framework, ct) ->
+    {ok, common_test};
 normalize_value(log_port, Value) when is_integer(Value), Value > 0, Value < 65536 ->
     {ok, Value};
-normalize_value(log_volume, auto) -> {ok, auto};
-normalize_value(log_volume, Value) -> normalize_string(Value);
 normalize_value(_Key, _Value) -> error.
 
 normalize_boolean(true) -> {ok, true};
@@ -131,16 +136,6 @@ normalize_images([Image | Rest], Acc) when is_list(Image), Image =/= [] ->
         false -> error
     end;
 normalize_images(_Images, _Acc) ->
-    error.
-
-normalize_string(Value) when is_binary(Value), byte_size(Value) > 0 ->
-    {ok, binary_to_list(Value)};
-normalize_string(Value) when is_list(Value), Value =/= [] ->
-    case lists:all(fun is_integer/1, Value) of
-        true -> {ok, Value};
-        false -> error
-    end;
-normalize_string(_Value) ->
     error.
 
 safe_version([First | Rest]) ->

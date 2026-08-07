@@ -1,8 +1,8 @@
 -module(rebar3_docker_ci_docker).
 
 -export([inspect_image_args/1, pull_args/1, detect_otp_args/1, parse_otp_release/1,
-         create_volume_args/1, run_args/2, viewer_args/2, volume_file_args/2,
-         inspect_volume_args/1, execute/1, execute/2, execute_capture/1,
+         run_args/2, viewer_args/2,
+         execute/1, execute/2, execute_capture/1,
          execute_quiet/1, run_matrix/2]).
 
 pull_args(Image) ->
@@ -27,12 +27,6 @@ parse_otp_release(Output) when is_list(Output) ->
 parse_otp_release(_Output) ->
     {error, invalid_otp_release}.
 
-inspect_volume_args(Volume) ->
-    ["volume", "inspect", Volume].
-
-create_volume_args(Volume) ->
-    ["volume", "create", Volume].
-
 run_args(Context, Target) ->
     ProjectRoot = maps:get(project_root, Context),
     ScriptsDir = maps:get(scripts_dir, Context),
@@ -46,22 +40,19 @@ run_args(Context, Target) ->
         env("RUN_XREF", bool_string(maps:get(run_xref, Context))) ++
         env("RUN_DIALYZER", bool_string(maps:get(run_dialyzer, Context))) ++
         env("USE_CHECKOUTS", bool_string(maps:get(use_checkouts, Context))) ++
+        env("TEST_FRAMEWORK", atom_to_list(maps:get(test_framework, Context))) ++
         env("OUTPUT_LANG", atom_to_list(maps:get(output_lang, Context))) ++
         ["--volume", ProjectRoot ++ ":/mnt/source:ro",
          "--volume", ScriptsDir ++ ":/mnt/scripts:ro",
-         "--volume", maps:get(log_volume, Context) ++ ":/mnt/logs"],
+         "--volume", maps:get(results_dir, Context) ++ ":/mnt/results"],
     Base ++ checkout_args(maps:get(checkouts, Context)) ++
         ["--entrypoint", "bash", Image, "/mnt/scripts/inner_test.sh"].
 
-viewer_args(Volume, Port) ->
+viewer_args(ResultsDir, Port) ->
     ["run", "--rm", "--interactive",
      "--publish", integer_to_list(Port) ++ ":80",
-     "--volume", Volume ++ ":/usr/share/nginx/html:ro",
+     "--volume", ResultsDir ++ ":/usr/share/nginx/html:ro",
      "nginx:alpine", "/bin/sh", "-c", viewer_command()].
-
-volume_file_args(Volume, RelativePath) ->
-    ["run", "--rm", "--volume", Volume ++ ":/data:ro",
-     "nginx:alpine", "/bin/sh", "-c", "test -f /data/" ++ RelativePath].
 
 execute(Args) ->
     case os:find_executable("docker") of

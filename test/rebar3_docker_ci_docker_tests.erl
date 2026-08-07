@@ -27,12 +27,13 @@ run_args_test() ->
     Context = #{project_root => "/project",
                 scripts_dir => "/plugin/priv",
                 project_name => "sample",
-                log_volume => "ci-logs",
+                results_dir => "/project/_build/docker_ci/results",
                 test_suite => "sample_SUITE",
                 test_case => "works",
                 run_xref => true,
                 run_dialyzer => false,
                 use_checkouts => true,
+                test_framework => common_test,
                 output_lang => en,
                 checkouts => [{"dep", "/checkout/dep"}]},
     Target = #{image => "example/erlang-ci:stable", otp => "28"},
@@ -41,16 +42,19 @@ run_args_test() ->
     ?assert(member_pair("--env", "TEST_SUITE=sample_SUITE", Args)),
     ?assert(member_pair("--env", "TEST_CASE=works", Args)),
     ?assert(member_pair("--volume", "/project:/mnt/source:ro", Args)),
+    ?assert(member_pair("--volume",
+                        "/project/_build/docker_ci/results:/mnt/results", Args)),
     ?assert(member_pair("--volume", "/checkout/dep:/mnt/checkouts/dep:ro", Args)),
     ?assert(member_pair("--entrypoint", "bash", Args)),
     ?assertEqual(["example/erlang-ci:stable", "/mnt/scripts/inner_test.sh"],
                  lists:nthtail(length(Args) - 2, Args)).
 
 viewer_args_test() ->
-    Args = rebar3_docker_ci_docker:viewer_args("ci-logs", 8082),
+    Args = rebar3_docker_ci_docker:viewer_args("/project/_build/docker_ci/results", 8082),
     ?assert(member_pair("--publish", "8082:80", Args)),
     ?assert(member_pair("--volume",
-                        "ci-logs:/usr/share/nginx/html:ro", Args)),
+                        "/project/_build/docker_ci/results:/usr/share/nginx/html:ro",
+                        Args)),
     ?assert(lists:member("--interactive", Args)),
     ?assert(lists:member("nginx:alpine", Args)),
     Command = lists:last(Args),
@@ -63,13 +67,6 @@ viewer_args_test() ->
     ?assertNotEqual(nomatch, string:find(Command, "exec 3<&0")),
     ?assertNotEqual(nomatch,
                     string:find(Command, "kill -TERM $nginx_pid")).
-
-volume_file_args_test() ->
-    ?assertEqual(["run", "--rm", "--volume", "ci-logs:/data:ro",
-                  "nginx:alpine", "/bin/sh", "-c",
-                  "test -f /data/19/logs/index.html"],
-                 rebar3_docker_ci_docker:volume_file_args(
-                   "ci-logs", "19/logs/index.html")).
 
 matrix_continues_after_failure_test() ->
     put(matrix_seen, []),

@@ -35,12 +35,18 @@ format_error({conflicting_target_config, erlang_versions, docker_images}) ->
 format_error({removed_config, image_name}) ->
     "docker_ci option image_name was removed in 0.2.0; configure "
     "erlang_versions or docker_images instead";
+format_error({removed_config, log_volume}) ->
+    "docker_ci option log_volume was removed in 0.3.0; results are "
+    "written to _build/docker_ci/results instead";
 format_error({pull_failed, Failures}) ->
     io_lib:format("failed to pull Docker CI images: ~p", [Failures]);
 format_error({unknown_config, Key}) ->
     io_lib:format("unknown docker_ci configuration option: ~p", [Key]);
 format_error(case_requires_suite) ->
     "--case requires --suite";
+format_error({selection_requires_common_test, Framework}) ->
+    io_lib:format("--suite/--case require test_framework common_test, "
+                  "but it is ~p", [Framework]);
 format_error(docker_not_found) ->
     "Docker was not found in PATH";
 format_error(plugin_priv_not_found) ->
@@ -57,8 +63,15 @@ format_error({duplicate_otp_release, Otp, Images}) ->
                   "report directories would overlap", [Images, Otp]);
 format_error({otp_not_configured, Otp}) ->
     io_lib:format("no configured Docker image provides Erlang/OTP ~s", [Otp]);
-format_error({log_volume_missing, Volume}) ->
-    io_lib:format("Docker log volume ~s does not exist; run rebar3 docker_ci run first", [Volume]);
+format_error({results_missing, ResultsDir}) ->
+    io_lib:format("Docker CI results directory ~s does not exist; "
+                  "run rebar3 docker_ci run first", [ResultsDir]);
+format_error({results_dir_failed, ResultsDir, Reason}) ->
+    io_lib:format("could not create Docker CI results directory ~s: ~p",
+                  [ResultsDir, Reason]);
+format_error({results_write_failed, File, Reason}) ->
+    io_lib:format("could not write Docker CI results file ~s: ~p",
+                  [File, Reason]);
 format_error({invalid_port, Port}) ->
     io_lib:format("invalid log viewer port: ~p", [Port]);
 format_error({ci_failed, Failures}) ->

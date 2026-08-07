@@ -12,8 +12,8 @@ defaults_test() ->
     ?assertEqual(false, value(run_dialyzer, Config)),
     ?assertEqual(auto, value(use_checkouts, Config)),
     ?assertEqual(auto, value(output_lang, Config)),
-    ?assertEqual(8081, value(log_port, Config)),
-    ?assertEqual(auto, value(log_volume, Config)).
+    ?assertEqual(common_test, value(test_framework, Config)),
+    ?assertEqual(8081, value(log_port, Config)).
 
 overrides_test() ->
     Input = [{docker_images, ["erlang:21", <<"example/erlang-ci:27">>]},
@@ -21,8 +21,8 @@ overrides_test() ->
              {run_dialyzer, true},
              {use_checkouts, true},
              {output_lang, cn},
-             {log_port, 9090},
-             {log_volume, "custom-volume"}],
+             {test_framework, eunit},
+             {log_port, 9090}],
     {ok, Config} = rebar3_docker_ci_config:from_list(Input),
     ?assertEqual(docker_images, value(target_source, Config)),
     ?assertEqual(["erlang:21", "example/erlang-ci:27"],
@@ -31,8 +31,8 @@ overrides_test() ->
     ?assertEqual(true, value(run_dialyzer, Config)),
     ?assertEqual(true, value(use_checkouts, Config)),
     ?assertEqual(cn, value(output_lang, Config)),
-    ?assertEqual(9090, value(log_port, Config)),
-    ?assertEqual("custom-volume", value(log_volume, Config)).
+    ?assertEqual(eunit, value(test_framework, Config)),
+    ?assertEqual(9090, value(log_port, Config)).
 
 required_targets_test_() ->
     [{"missing targets",
@@ -49,7 +49,12 @@ required_targets_test_() ->
       ?_assertEqual({error, {removed_config, image_name}},
                     rebar3_docker_ci_config:from_list(
                       [{erlang_versions, ["27"]},
-                       {image_name, "legacy-ci"}]))}].
+                       {image_name, "legacy-ci"}]))},
+     {"removed log_volume",
+      ?_assertEqual({error, {removed_config, log_volume}},
+                    rebar3_docker_ci_config:from_list(
+                      [{erlang_versions, ["27"]},
+                       {log_volume, "legacy-volume"}]))}].
 
 invalid_values_test_() ->
     [{"empty versions", ?_assertMatch({error, {invalid_config, erlang_versions, _}},
@@ -79,6 +84,10 @@ invalid_values_test_() ->
                                      rebar3_docker_ci_config:from_list(
                                        [{erlang_versions, ["27"]},
                                         {output_lang, fr}]))},
+     {"bad framework", ?_assertMatch({error, {invalid_config, test_framework, _}},
+                                      rebar3_docker_ci_config:from_list(
+                                        [{erlang_versions, ["27"]},
+                                         {test_framework, rebar}]))},
      {"bad port", ?_assertMatch({error, {invalid_config, log_port, _}},
                                  rebar3_docker_ci_config:from_list(
                                    [{erlang_versions, ["27"]},

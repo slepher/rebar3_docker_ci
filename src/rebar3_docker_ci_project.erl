@@ -1,6 +1,6 @@
 -module(rebar3_docker_ci_project).
 
--export([root/0, name/1, safe_name/1, volume_name/2,
+-export([root/0, name/1, results_dir/1,
          resolve_checkouts/2, priv_dir/0]).
 
 root() ->
@@ -12,18 +12,8 @@ name(State) ->
         [] -> filename:basename(root())
     end.
 
-safe_name(Value) ->
-    Lowercase = string:lowercase(to_list(Value)),
-    Sanitized = re:replace(Lowercase, "[^a-z0-9]+", "-", [global, {return, list}]),
-    case string:trim(Sanitized, both, "-") of
-        [] -> "project";
-        Name -> Name
-    end.
-
-volume_name(auto, ProjectName) ->
-    "rebar3-docker-ci-" ++ safe_name(ProjectName);
-volume_name(Value, _ProjectName) ->
-    to_list(Value).
+results_dir(Root) ->
+    filename:join([Root, "_build", "docker_ci", "results"]).
 
 resolve_checkouts(_Root, false) ->
     {ok, []};

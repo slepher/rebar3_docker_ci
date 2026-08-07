@@ -27,19 +27,19 @@ do(State) ->
     maybe
         {ok, Config} ?= rebar3_docker_ci_config:load(State),
         ProjectName = rebar3_docker_ci_project:name(State),
-        Volume = rebar3_docker_ci_project:volume_name(
-                   rebar3_docker_ci_config:get(log_volume, Config), ProjectName),
+        Root = rebar3_docker_ci_project:root(),
+        ResultsDir = rebar3_docker_ci_project:results_dir(Root),
+        ok ?= ensure_results_dir_exists(ResultsDir),
         Options = parsed_options(State),
         Port = maps:get(port, Options,
                         rebar3_docker_ci_config:get(log_port, Config)),
         {ok, ValidPort} ?= validate_port(Port),
-        ok ?= ensure_volume_exists(Volume),
         Images = rebar3_docker_ci_config:get(target_images, Config),
         {ok, Targets} ?= rebar3_docker_ci_targets:resolve(Images),
         Versions = [maps:get(otp, Target) || Target <- Targets],
-        print_links(ProjectName, Versions, Volume, ValidPort),
+        print_links(ProjectName, Versions, ResultsDir, ValidPort),
         ok ?= rebar3_docker_ci_docker:execute(
-                 rebar3_docker_ci_docker:viewer_args(Volume, ValidPort)),
+                 rebar3_docker_ci_docker:viewer_args(ResultsDir, ValidPort)),
         {ok, State}
     else
         {error, Reason} -> {error, {?MODULE, Reason}}
@@ -53,44 +53,41 @@ validate_port(Port) when is_integer(Port), Port > 0, Port < 65536 ->
 validate_port(Port) ->
     {error, {invalid_port, Port}}.
 
-ensure_volume_exists(Volume) ->
-    case rebar3_docker_ci_docker:execute_quiet(
-           rebar3_docker_ci_docker:inspect_volume_args(Volume)) of
-        ok -> ok;
-        {error, _Reason} ->
-            {error, {log_volume_missing, Volume}}
+ensure_results_dir_exists(ResultsDir) ->
+    case filelib:is_dir(ResultsDir) of
+        true -> ok;
+        false -> {error, {results_missing, ResultsDir}}
     end.
 
-print_links(ProjectName, Versions, Volume, Port) ->
+print_links(ProjectName, Versions, ResultsDir, Port) ->
     rebar_api:info("~n=== ~s local CI logs ===", [ProjectName]),
     rebar_api:info("--------------------------------------------------------", []),
-    lists:foreach(fun(Version) -> print_version_links(Version, Port, Volume) end,
+    lists:foreach(fun(Version) -> print_version_links(Version, Port, ResultsDir) end,
                   Versions),
     rebar_api:info("--------------------------------------------------------", []),
     rebar_api:info("Press Ctrl+C to stop the viewer.", []).
 
-print_version_links(Version, Port, Volume) ->
+print_version_links(Version, Port, ResultsDir) ->
     Base = "http://localhost:" ++ integer_to_list(Port) ++ "/" ++ Version,
     rebar_api:info(">>> Erlang/OTP ~s", [Version]),
-    print_if_present(Volume, Version ++ "/ci-summary.txt",
+    print_if_present(ResultsDir, Version ++ "/ci-summary.txt",
                      "  Summary: ~s/ci-summary.txt", [Base]),
-    case present(Volume, Version ++ "/logs/index.html") of
+    case present(ResultsDir, Version ++ "/logs/index.html") of
         true -> rebar_api:info("  Logs:    ~s/logs/index.html", [Base]);
         false -> rebar_api:info("  No Common Test logs found.", [])
     end,
-    print_if_present(Volume, Version ++ "/cover/index.html",
+    print_if_present(ResultsDir, Version ++ "/cover/index.html",
                      "  Cover:   ~s/cover/index.html", [Base]),
     rebar_api:info("", []).
 
-print_if_present(Volume, Path, Format, Args) ->
-    case present(Volume, Path) of
+print_if_present(ResultsDir, RelativePath, Format, Args) ->
+    case present(ResultsDir, RelativePath) of
         true -> rebar_api:info(Format, Args);
         false -> ok
     end.
 
-present(Volume, Path) ->
-    rebar3_docker_ci_docker:execute_quiet(
-      rebar3_docker_ci_docker:volume_file_args(Volume, Path)) =:= ok.
+present(ResultsDir, RelativePath) ->
+    filelib:is_regular(filename:join(ResultsDir, RelativePath)).
 
 parsed_options(State) ->
     case rebar_state:command_parsed_args(State) of

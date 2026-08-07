@@ -51,12 +51,17 @@ common_test_selection_test_() ->
      {"case", ?_assertEqual({ok, {"a_SUITE", "works"}},
                              rebar3_docker_ci_prv_run:validate_selection("a_SUITE", "works"))},
      {"case without suite", ?_assertMatch({error, case_requires_suite},
-                                           rebar3_docker_ci_prv_run:validate_selection("", "works"))}].
+                                           rebar3_docker_ci_prv_run:validate_selection("", "works"))},
+     {"eunit all", ?_assertEqual({ok, {"", ""}},
+                                  rebar3_docker_ci_prv_run:validate_selection("", "", eunit))},
+     {"eunit with suite",
+      ?_assertMatch({error, {selection_requires_common_test, eunit}},
+                    rebar3_docker_ci_prv_run:validate_selection("a_SUITE", "", eunit))}].
 
 provider_option_names_test() ->
     ?assertEqual([], option_names(rebar3_docker_ci_prv_config:opts())),
     ?assertEqual([], option_names(rebar3_docker_ci_prv_pull:opts())),
-    ?assertEqual([otp, suite, 'case', dialyzer, skip_xref, no_checkouts, no_view],
+    ?assertEqual([otp, suite, 'case', dialyzer, skip_xref, no_checkouts, view],
                  option_names(rebar3_docker_ci_prv_run:opts())),
     ?assertEqual([port], option_names(rebar3_docker_ci_prv_logs:opts())).
 

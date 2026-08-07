@@ -3,7 +3,7 @@
 -behaviour(provider).
 
 -export([init/1, do/1, format_error/1, opts/0, validate_selection/2,
-         matrix_results/2]).
+         validate_selection/3, matrix_results/2]).
 
 init(State) ->
     Provider = providers:create(
@@ -15,7 +15,8 @@ init(State) ->
                   {example, "rebar3 docker_ci run --otp 28 --suite sample_SUITE"},
                   {short_desc, "Run Rebar3 checks in Docker."},
                   {desc, "Run compile, xref, optional Dialyzer, and Common Test. "
-                         "--suite may be used alone; --case requires --suite."},
+                         "--suite may be used alone; --case requires --suite. "
+                         "Results are written under _build/docker_ci/results."},
                   {opts, opts()}]),
     {ok, rebar_state:add_provider(State, Provider)}.
 
@@ -32,21 +33,32 @@ opts() ->
       "Disable xref for this run."},
      {no_checkouts, undefined, "no-checkouts", boolean,
       "Ignore the project's _checkouts directory for this run."},
-     {no_view, undefined, "no-view", boolean,
-      "Return after the checks instead of starting the log viewer."}].
+     {view, undefined, "view", boolean,
+      "Start the log viewer after the checks instead of returning."}].
 
 do(State) ->
     Options = parsed_options(State),
     Suite = option_string(suite, Options),
     TestCase = option_string('case', Options),
-    case validate_selection(Suite, TestCase) of
-        {ok, Selection} -> load_and_run(State, Options, Selection);
+    maybe
+        {ok, Config} ?= rebar3_docker_ci_config:load(State),
+        Framework = rebar3_docker_ci_config:get(test_framework, Config),
+        {ok, Selection} ?= validate_selection(Suite, TestCase, Framework),
+        load_and_run(State, Options, Selection)
+    else
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
-validate_selection("", "") -> {ok, {"", ""}};
-validate_selection("", _TestCase) -> {error, case_requires_suite};
-validate_selection(Suite, TestCase) -> {ok, {Suite, TestCase}}.
+validate_selection(Suite, TestCase) ->
+    validate_selection(Suite, TestCase, common_test).
+
+validate_selection("", "", _Framework) -> {ok, {"", ""}};
+validate_selection("", _TestCase, _Framework) -> {error, case_requires_suite};
+validate_selection(Suite, TestCase, Framework) ->
+    case {Suite, Framework} of
+        {_Suite, common_test} -> {ok, {Suite, TestCase}};
+        {_Suite, _Framework} -> {error, {selection_requires_common_test, Framework}}
+    end.
 
 format_error(Reason) ->
     rebar3_docker_ci:format_error(Reason).
@@ -72,23 +84,24 @@ load_and_run(State, Options, Selection) ->
 run_with_project(State, Options, Suite, TestCase, Config,
                  Root, ProjectName, Checkouts) ->
     Images = rebar3_docker_ci_config:get(target_images, Config),
-    Volume = rebar3_docker_ci_project:volume_name(
-               rebar3_docker_ci_config:get(log_volume, Config), ProjectName),
+    ResultsDir = rebar3_docker_ci_project:results_dir(Root),
     maybe
         {ok, ResolvedTargets} ?= rebar3_docker_ci_targets:resolve(Images),
         {ok, Targets} ?= rebar3_docker_ci_targets:select(
                            ResolvedTargets, maps:get(otp, Options, undefined)),
-        ok ?= ensure_volume(Volume),
+        ok ?= ensure_results_dir(ResultsDir),
         {ok, PrivDir} ?= rebar3_docker_ci_project:priv_dir(),
         Context = #{project_root => Root,
                     scripts_dir => PrivDir,
                     project_name => ProjectName,
-                    log_volume => Volume,
+                    results_dir => ResultsDir,
                     test_suite => Suite,
                     test_case => TestCase,
                     run_xref => effective_xref(Options, Config),
                     run_dialyzer => effective_dialyzer(Options, Config),
                     use_checkouts => Checkouts =/= [],
+                    test_framework =>
+                        rebar3_docker_ci_config:get(test_framework, Config),
                     output_lang => output_language(Config),
                     checkouts => Checkouts},
         Result = rebar3_docker_ci_docker:run_matrix(
@@ -100,26 +113,39 @@ run_with_project(State, Options, Suite, TestCase, Config,
                            rebar3_docker_ci_docker:execute(
                              rebar3_docker_ci_docker:run_args(Context, Target))
                    end),
-        print_matrix_summary(ProjectName, Targets, Result),
+        ok ?= report_run(ProjectName, Targets, ResultsDir, Result),
         finish_run(State, Options, ProjectName, Targets,
-                   Volume, Config, Result)
+                   ResultsDir, Config, Result)
     else
         {error, Reason} -> {error, {?MODULE, Reason}}
     end.
 
-finish_run(State, Options, ProjectName, Targets, Volume, Config, Result) ->
-    case maps:get(no_view, Options, false) of
-        true -> provider_result(State, Result);
-        false ->
+finish_run(State, Options, ProjectName, Targets, ResultsDir, Config, Result) ->
+    case maps:get(view, Options, false) of
+        true ->
             Port = rebar3_docker_ci_config:get(log_port, Config),
             Versions = [maps:get(otp, Target) || Target <- Targets],
             rebar3_docker_ci_prv_logs:print_links(
-              ProjectName, Versions, Volume, Port),
+              ProjectName, Versions, ResultsDir, Port),
             case rebar3_docker_ci_docker:execute(
-                   rebar3_docker_ci_docker:viewer_args(Volume, Port)) of
+                   rebar3_docker_ci_docker:viewer_args(ResultsDir, Port)) of
                 ok -> provider_result(State, Result);
                 {error, Reason} -> {error, {?MODULE, Reason}}
-            end
+            end;
+        false ->
+            provider_result(State, Result)
+    end.
+
+report_run(ProjectName, Targets, ResultsDir, Result) ->
+    Content = rebar3_docker_ci_report:content(
+                ProjectName, Targets, Result, ResultsDir),
+    ResultsFile = filename:join(ResultsDir, "ci-results.txt"),
+    case file:write_file(ResultsFile, Content) of
+        ok ->
+            rebar_api:info("~s", [Content]),
+            ok;
+        {error, Reason} ->
+            {error, {results_write_failed, ResultsFile, Reason}}
     end.
 
 matrix_results(Targets, ok) ->
@@ -135,38 +161,13 @@ matrix_target_result(Target, Failures) ->
         {Target, Reason} -> {Target, {failed, Reason}}
     end.
 
-print_matrix_summary(ProjectName, Targets, Result) ->
-    rebar_api:info("~n=== ~s local CI summary ===", [ProjectName]),
-    rebar_api:info("--------------------------------------------------------", []),
-    lists:foreach(fun print_matrix_result/1, matrix_results(Targets, Result)),
-    rebar_api:info("--------------------------------------------------------", []),
-    rebar_api:info("Overall result: ~s", [overall_status(Result)]).
-
-print_matrix_result({Target, Status}) ->
-    rebar_api:info(">>> Erlang/OTP ~s [~s]: ~s",
-                   [maps:get(otp, Target), maps:get(image, Target),
-                    status_text(Status)]).
-
-status_text(passed) ->
-    "PASSED";
-status_text({failed, {command_failed, Status}}) ->
-    lists:flatten(io_lib:format("FAILED (exit code ~p)", [Status]));
-status_text({failed, Reason}) ->
-    lists:flatten(io_lib:format("FAILED (~p)", [Reason])).
-
-overall_status(ok) -> "PASSED";
-overall_status({error, _Reason}) -> "FAILED".
-
 provider_result(State, ok) -> {ok, State};
 provider_result(_State, {error, Reason}) -> {error, {?MODULE, Reason}}.
 
-ensure_volume(Volume) ->
-    case rebar3_docker_ci_docker:execute_quiet(
-           rebar3_docker_ci_docker:inspect_volume_args(Volume)) of
+ensure_results_dir(ResultsDir) ->
+    case filelib:ensure_dir(filename:join(ResultsDir, "placeholder")) of
         ok -> ok;
-        {error, _Reason} ->
-            rebar3_docker_ci_docker:execute(
-              rebar3_docker_ci_docker:create_volume_args(Volume))
+        {error, Reason} -> {error, {results_dir_failed, ResultsDir, Reason}}
     end.
 
 effective_xref(Options, Config) ->

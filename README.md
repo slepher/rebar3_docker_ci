@@ -17,8 +17,8 @@ rebar3 docker_ci logs
 
 The plugin host and the project under test have independent OTP requirements:
 
-- Release `0.2.0` runs the plugin on Erlang/OTP 27 or newer.
-- Tag `otp-19-0.2.0` preserves a host plugin compatible with OTP 19.
+- Release `0.3.0` runs the plugin on Erlang/OTP 27 or newer.
+- Tag `otp-19-0.3.0` preserves a host plugin compatible with OTP 19.
 - Test targets may use older or newer OTP releases provided by Docker images.
 
 Install the plugin globally on the developer machine. Do not list it in the
@@ -32,7 +32,7 @@ container and would couple the target OTP to the host plugin requirement.
 - Docker Desktop or Docker Engine available in `PATH`
 - Git when the project is a Git worktree
 
-Use `otp-19-0.2.0` when the developer machine itself must run OTP 19.
+Use `otp-19-0.3.0` when the developer machine itself must run OTP 19.
 
 ## Installation
 
@@ -42,7 +42,7 @@ Add the plugin to `~/.config/rebar3/rebar.config`:
 {plugins, [
     {rebar3_docker_ci,
      {git, "https://github.com/slepher/rebar3_docker_ci.git",
-      {tag, "0.2.0"}}}
+      {tag, "0.3.0"}}}
 ]}.
 ```
 
@@ -69,8 +69,8 @@ Exactly one target source is required. For official Erlang Docker Hub images:
     {run_dialyzer, false},
     {use_checkouts, auto},
     {output_lang, auto},
-    {log_port, 8081},
-    {log_volume, auto}
+    {test_framework, common_test},
+    {log_port, 8081}
 ]}.
 ```
 
@@ -98,11 +98,12 @@ validation result, and normalized image names.
 | `run_dialyzer` | `false` | Run `rebar3 dialyzer` before Common Test. |
 | `use_checkouts` | `auto` | Include `_checkouts`: `auto`, `true`, or `false`. |
 | `output_lang` | `auto` | Runner output language: `auto`, `en`, or `cn`. |
+| `test_framework` | `common_test` | Test runner: `common_test` (or `ct`) or `eunit`. |
 | `log_port` | `8081` | Host port used by the log viewer. |
-| `log_volume` | `auto` | Docker volume name; `auto` isolates projects by name. |
 
 Common Test suite and case selection are command-line-only. `--suite` may be
-used alone; `--case` requires `--suite`.
+used alone; `--case` requires `--suite`. Both require
+`test_framework=common_test`.
 
 ## Pull images
 
@@ -122,16 +123,19 @@ Two configured images must not report the same OTP release.
 
 ```text
 # Entire configured matrix, without starting the log viewer
-rebar3 docker_ci run --no-view
+rebar3 docker_ci run
 
 # One detected OTP release
-rebar3 docker_ci run --otp 23 --no-view
+rebar3 docker_ci run --otp 23
 
 # One Common Test suite
-rebar3 docker_ci run --otp 28 --suite sample_SUITE --no-view
+rebar3 docker_ci run --otp 28 --suite sample_SUITE
 
 # One case from a suite
-rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case --no-view
+rebar3 docker_ci run --otp 29 --suite sample_SUITE --case sample_case
+
+# Start the log viewer after the checks
+rebar3 docker_ci run --view
 ```
 
 Run overrides:
@@ -139,13 +143,33 @@ Run overrides:
 - `--dialyzer` enables Dialyzer for this run.
 - `--skip-xref` disables xref for this run.
 - `--no-checkouts` ignores the project's `_checkouts` directory.
-- `--no-view` returns after testing instead of starting Nginx.
+- `--view` starts the Nginx viewer after the checks; the default is to return.
 
 For each target the runner executes compile, optional xref, optional Dialyzer,
-and Common Test in that order. A failed step skips later steps for that target,
-while the remaining matrix continues. The final summary lists every selected
-OTP release and source image, followed by the overall result and HTTP log links
-when the viewer is enabled.
+and the configured test framework (`common_test` or `eunit`) in that order. A
+failed step skips later steps for that target, while the remaining matrix
+continues. Each run writes a main results file and per-target artifacts under
+`_build/docker_ci/results/` (see below).
+
+## Results and failures
+
+All results are written as plain files to the host project directory, readable
+without Docker:
+
+```text
+_build/docker_ci/results/ci-results.txt          main results file for the run
+_build/docker_ci/results/<otp>/ci-summary.txt    per-check exit codes
+_build/docker_ci/results/<otp>/failures.txt      failed suites, cases, reasons
+_build/docker_ci/results/<otp>/compile.log       full check output (one per check)
+_build/docker_ci/results/<otp>/logs/             Common Test logs
+_build/docker_ci/results/<otp>/cover/            coverage report
+```
+
+`ci-results.txt` is the single entry point: passed targets appear as one line,
+failed targets show the failed check, the failing suites and cases with their
+exceptions, and absolute-path links to the failure logs. The same content is
+printed to stdout on failure. Exit codes are unchanged: a failed target fails
+the run.
 
 ## Source isolation and checkouts
 
@@ -169,7 +193,7 @@ rebar3 docker_ci logs
 rebar3 docker_ci logs --port 8082
 ```
 
-Nginx serves the Docker log volume at:
+Nginx serves the results directory at:
 
 ```text
 /<otp>/ci-summary.txt
