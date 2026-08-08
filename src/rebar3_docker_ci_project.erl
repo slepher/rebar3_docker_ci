@@ -1,6 +1,6 @@
 -module(rebar3_docker_ci_project).
 
--export([root/0, name/1, results_dir/1,
+-export([root/0, name/1, results_dir/1, logs_dir/1,
          resolve_checkouts/2, priv_dir/0]).
 
 root() ->
@@ -14,6 +14,9 @@ name(State) ->
 
 results_dir(Root) ->
     filename:join([Root, "_build", "docker_ci", "results"]).
+
+logs_dir(Root) ->
+    filename:join([Root, "_build", "docker_ci", "logs"]).
 
 resolve_checkouts(_Root, false) ->
     {ok, []};

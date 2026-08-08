@@ -50,4 +50,6 @@ example() ->
     "]}.\n\n"
     "Optional fields and defaults:\n"
     "  run_xref=true, run_dialyzer=false, run_ct=true, run_eunit=false,\n"
-    "  use_checkouts=auto, output_lang=auto, log_port=8081".
+    "  use_checkouts=auto, output_lang=auto, log_port=8081, jobs=4\n"
+    "  (each target's output is streamed to\n"
+    "  _build/docker_ci/results/<otp>/ci.log).".

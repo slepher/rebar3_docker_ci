@@ -14,6 +14,7 @@ provider_modules() ->
     [rebar3_docker_ci_prv_config,
      rebar3_docker_ci_prv_pull,
      rebar3_docker_ci_prv_run,
+     rebar3_docker_ci_prv_clean,
      rebar3_docker_ci_prv_logs].
 
 format_error({invalid_config, Key, Value}) ->
@@ -63,11 +64,42 @@ format_error({results_missing, ResultsDir}) ->
 format_error({results_dir_failed, ResultsDir, Reason}) ->
     io_lib:format("could not create Docker CI results directory ~s: ~p",
                   [ResultsDir, Reason]);
+format_error({results_dir_not_writable, ResultsDir, Reason}) ->
+    io_lib:format("Docker CI results directory ~s is not writable (~p); "
+                  "it may be owned by root from an older run, remove it "
+                  "with `rebar3 docker_ci clean` or manually",
+                  [ResultsDir, Reason]);
 format_error({results_write_failed, File, Reason}) ->
     io_lib:format("could not write Docker CI results file ~s: ~p",
                   [File, Reason]);
 format_error({invalid_port, Port}) ->
     io_lib:format("invalid log viewer port: ~p", [Port]);
+format_error({invalid_jobs, Value}) ->
+    io_lib:format("invalid --jobs value ~p; use a positive integer or 'max'",
+                  [Value]);
+format_error({ci_log_failed, File, Reason}) ->
+    io_lib:format("could not write Docker CI log ~s: ~p", [File, Reason]);
+format_error({summary_failed, Reason}) ->
+    io_lib:format("could not write Docker CI summary: ~p", [Reason]);
+format_error(run_in_progress) ->
+    "another docker_ci run is already in progress for this project; "
+    "remove _build/docker_ci/run.lock if the previous run crashed";
+format_error({run_lock_failed, Path, Reason}) ->
+    io_lib:format("could not create the docker_ci run lock ~s: ~p",
+                  [Path, Reason]);
+format_error({artifact_cleanup_failed, Path, Reason}) ->
+    io_lib:format("could not clean up stale docker_ci artifact ~s: ~p",
+                  [Path, Reason]);
+format_error({stage_failed, Stage}) ->
+    io_lib:format("Docker CI stage ~s failed", [Stage]);
+format_error({aborted, Stage}) ->
+    io_lib:format("Docker CI stage ~s aborted", [Stage]);
+format_error({protocol_error, Detail}) ->
+    io_lib:format("Docker CI protocol error: ~p", [Detail]);
+format_error({infra, docker_not_found}) ->
+    "Docker was not found in PATH";
+format_error({infra, Reason}) ->
+    io_lib:format("Docker infrastructure failure: ~p", [Reason]);
 format_error({ci_failed, Failures}) ->
     io_lib:format("Docker CI failed: ~p", [Failures]);
 format_error({command_failed, Status}) ->

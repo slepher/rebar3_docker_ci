@@ -9,7 +9,8 @@
           run_eunit => false,
           use_checkouts => auto,
           output_lang => auto,
-          log_port => 8081}).
+          log_port => 8081,
+          jobs => 4}).
 
 load(State) ->
     from_list(rebar_state:get(State, docker_ci, [])).
@@ -99,6 +100,10 @@ normalize_value(use_checkouts, Value)
     {ok, Value};
 normalize_value(output_lang, Value)
   when Value =:= auto; Value =:= en; Value =:= cn ->
+    {ok, Value};
+normalize_value(jobs, max) ->
+    {ok, max};
+normalize_value(jobs, Value) when is_integer(Value), Value >= 1 ->
     {ok, Value};
 normalize_value(log_port, Value) when is_integer(Value), Value > 0, Value < 65536 ->
     {ok, Value};

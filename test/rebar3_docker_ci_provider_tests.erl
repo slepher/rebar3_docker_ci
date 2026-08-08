@@ -6,6 +6,7 @@ provider_modules_test() ->
     ?assertEqual([rebar3_docker_ci_prv_config,
                   rebar3_docker_ci_prv_pull,
                   rebar3_docker_ci_prv_run,
+                  rebar3_docker_ci_prv_clean,
                   rebar3_docker_ci_prv_logs],
                  rebar3_docker_ci:provider_modules()).
 
@@ -61,7 +62,8 @@ common_test_selection_test_() ->
 provider_option_names_test() ->
     ?assertEqual([], option_names(rebar3_docker_ci_prv_config:opts())),
     ?assertEqual([], option_names(rebar3_docker_ci_prv_pull:opts())),
-    ?assertEqual([otp, suite, 'case', dialyzer, skip_xref, no_checkouts, view],
+    ?assertEqual([otp, suite, 'case', dialyzer, skip_xref, jobs,
+                  no_checkouts, view],
                  option_names(rebar3_docker_ci_prv_run:opts())),
     ?assertEqual([port], option_names(rebar3_docker_ci_prv_logs:opts())).
 

@@ -83,10 +83,12 @@ print_links(ProjectName, Versions, ResultsDir, Port) ->
 print_version_links(Version, Port, ResultsDir) ->
     Base = "http://localhost:" ++ integer_to_list(Port) ++ "/" ++ Version,
     rebar_api:info(">>> Erlang/OTP ~s", [Version]),
+    print_if_present(ResultsDir, Version ++ "/ci.log",
+                     "  CI log:    ~s/ci.log", [Base]),
     print_if_present(ResultsDir, Version ++ "/ci-summary.txt",
                      "  Summary: ~s/ci-summary.txt", [Base]),
     case present(ResultsDir, Version ++ "/logs/index.html") of
-        true -> rebar_api:info("  Logs:    ~s/logs/index.html", [Base]);
+        true -> rebar_api:info("  CT logs:  ~s/logs/index.html", [Base]);
         false -> rebar_api:info("  No Common Test logs found.", [])
     end,
     print_if_present(ResultsDir, Version ++ "/cover/index.html",
