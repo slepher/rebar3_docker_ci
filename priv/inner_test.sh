@@ -220,6 +220,7 @@ publish_cover() {
     if [[ ! -d "$from" ]] || [[ -z "$(ls -A "$from" 2>/dev/null)" ]]; then
         return 0
     fi
+    mkdir -p "$VER_RESULTS"
     local staging="$to.tmp"
     rm -rf "$staging"
     if ! cp -a "$from" "$staging"; then
