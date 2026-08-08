@@ -1,5 +1,7 @@
 -module(rebar3_docker_ci_test_utils).
 
+-include_lib("kernel/include/file.hrl").
+
 -export([del_dir_r/1]).
 
 del_dir_r(Dir) ->
@@ -15,7 +17,9 @@ del_dir_r(Dir) ->
     end.
 
 remove_entry(Path) ->
-    case filelib:is_dir(Path) of
-        true -> del_dir_r(Path);
-        false -> file:delete(Path)
+    case file:read_link_info(Path) of
+        {ok, #file_info{type = directory}} ->
+            del_dir_r(Path);
+        _ ->
+            file:delete(Path)
     end.
