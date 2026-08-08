@@ -29,6 +29,7 @@ compile / xref / Dialyzer / Common Test / EUnit。
     {run_xref, true},        % 默认 true
     {run_dialyzer, false},   % 默认 false
     {use_checkouts, auto},   % auto | true | false，默认 auto
+    {jobs, 4},               % 并发目标数：正整数或 max，默认 4
     {log_port, 8081}         % --view 时的日志查看器端口
 ]}.
 ```
@@ -50,6 +51,19 @@ compile / xref / Dialyzer / Common Test / EUnit。
 | `rebar3 docker_ci clean` | 清理 `_build/docker_ci` 结果目录 |
 | `rebar3 docker_ci logs --view` | 启动结果查看器（nginx） |
 
+## 阶段
+
+每个目标按固定顺序执行阶段：
+
+```
+compile → xref → dialyzer → common_test → eunit
+```
+
+- 每阶段在容器内以独立的标准 `rebar3 <command>` 进程运行，与本地
+  开发环境同构；依赖插件的 hook 注入不会被后续阶段重置。
+- 某阶段失败后，后续阶段不再启动，报告中标记为 `skipped`。
+- `jobs`/`-j` 控制并发目标数，各目标独立运行、互不影响。
+
 ## 结果目录
 
 每次运行写入 `_build/docker_ci/results/`：
@@ -68,6 +82,11 @@ _build/docker_ci/results/
   误导性产物。
 - `ci-summary.txt` 中的 `run_id` 与 `ct_run=` 标识本轮精确产物；报告中
   的失败用例与 CT 日志链接只引用本轮记录，绝不回退到历史轮次。
+- 新一轮运行开始时，每个 OTP 目录会清理上一轮的 ci.log、summary、
+  cover 等产物（`logs/` CT 日志历史保留）；pre-0.4 的旧日志目录与旧的
+  `ci-results.txt` 也会自动清理。
+- 结果目录不可写（如旧版 root 运行遗留）时立即报错，可先
+  `rebar3 docker_ci clean` 或手动删除。
 
 ## 依赖与 _checkouts
 
