@@ -1,6 +1,6 @@
 {application, rebar3_docker_ci,
  [{description, "Run Rebar3 checks across Erlang/OTP Docker images"},
-   {vsn, "0.4.0"},
+   {vsn, "0.4.1"},
   {registered, []},
   {applications, [kernel, stdlib]},
   {env, []},
